@@ -24,7 +24,7 @@ foreach ($pdo->query("SHOW TABLES LIKE '%\\_mfnt'")->fetchAll(PDO::FETCH_COLUMN)
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
 foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ui', 'charts'] as $f) { require __DIR__ . "/../app/$f.php"; }
 mfnc_install();
-require __DIR__ . '/../app/actions.php';
+require __DIR__ . '/../app/actions.php'; require __DIR__ . '/../app/actions_ext.php';
 
 // ---- tiny assertion helpers ----
 $pass = 0; $fail = 0; $section = '';
@@ -325,5 +325,55 @@ eq((int) val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA 
 eq((int) val('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE ? AND COLLATION_NAME IS NOT NULL AND COLLATION_NAME <> ?', ['%\\_mfnt', DB_COLLATION]), 0, 'all columns converted to one collation');
 check('joined string comparison across tables works', is_array(all('SELECT u.email FROM {users} u JOIN {settings} s ON s.k = u.name WHERE u.email = ?', ['x'])));
 
+
+// ================= email (native SMTP), SMS (Twilio REST), secrets, features, wallet =================
+section('secrets');
+$enc = secret_encrypt('s3cr3t-value'); check('secret is encrypted at rest', !str_contains($enc, 's3cr3t') && str_starts_with($enc, 'v1:')); eq(secret_decrypt($enc), 's3cr3t-value', 'secret decrypts'); eq(secret_decrypt('v1:garbage'), '', 'tampered secret yields nothing'); eq(mask_secret('abcdefghij'), '••••••••ghij', 'secret is masked'); eq(mask_secret(''), '', 'empty secret shows nothing');
+section('templates');
+eq(render_template('Hi {name}, {amount} {nope}', ['name' => 'Asha', 'amount' => '₹5']), 'Hi Asha, ₹5 {nope}', 'template parameters render; unknown ones are left visible');
+eq(normalize_phone('98765 43210'), '+919876543210', 'Indian number gets +91'); eq(normalize_phone('+1 (555) 123-4567'), '+15551234567', 'international number kept'); eq(normalize_phone('12'), null, 'short number rejected');
+$mime = build_mime('a@x.test', "Evil\r\nBcc: x@y.z", 'b@x.test', "Sub\r\nBcc: z@z.z", "line1\n.dot", '<p>x</p>'); check('header injection is neutralised', !preg_match('/^Bcc:/mi', $mime));
+section('SMTP client against a mock server');
+$smtpOut = sys_get_temp_dir() . '/mfnc_smtp_mock.json'; @unlink($smtpOut);
+$smtp = proc_open([PHP_BINARY, __DIR__ . '/smtp_mock.php', '127.0.0.1:2525', $smtpOut], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $sp);
+for ($i = 0; $i < 30; $i++) { $fp = @fsockopen('127.0.0.1', 2525, $en, $es, 0.2); if ($fp) { fclose($fp); break; } usleep(100000); }
+$cfgSet(['email_enabled' => '1', 'smtp_transport' => 'smtp', 'smtp_host' => '127.0.0.1', 'smtp_port' => '2525', 'smtp_secure' => 'none', 'smtp_user' => 'u1', 'smtp_from' => 'noreply@x.test', 'smtp_from_name' => 'Moms Finance']); secret_set('smtp_pass', 'p@ss');
+[$ok, $err] = send_email('mom@x.test', 'Hello ₹ test', "Body line\n.leading dot line", $M, 'test'); check('email sent through SMTP', $ok, $err);
+$got = json_decode((string) @file_get_contents($smtpOut), true)[0] ?? []; check('server saw the sender and recipient', str_contains($got['from'] ?? '', 'noreply@x.test') && str_contains($got['to'] ?? '', 'mom@x.test')); check('AUTH PLAIN carried the stored password', ($got['auth'] ?? '') === "\0u1\0p@ss");
+$bodyDecoded = ''; if (preg_match_all('/Content-Transfer-Encoding: base64\r?\n\r?\n([A-Za-z0-9+\/=\r\n]+)/', $got['data'] ?? '', $mm)) { $bodyDecoded = base64_decode(preg_replace('/\s+/', '', $mm[1][0])); } check('body survives encoding incl. leading dot', str_contains($bodyDecoded, "\n.leading dot line"));
+eq(val("SELECT status FROM {email_log} WHERE event='test' ORDER BY id DESC LIMIT 1"), 'sent', 'email is logged as sent');
+[$ok, $err] = send_email('reject@x.test', 'x', 'y', $M, 'test'); check('a rejected recipient is reported', !$ok && str_contains($err, '550'), $err); eq(val("SELECT status FROM {email_log} ORDER BY id DESC LIMIT 1"), 'failed', 'rejection is logged as failed');
+[$ok] = send_email('not-an-email', 'x', 'y'); check('invalid recipient refused', !$ok);
+$cfgSet(['smtp_port' => '2599']); [$ok, $err] = send_email('mom@x.test', 'x', 'y', $M, 'test'); check('connection failure is reported, not thrown', !$ok && str_contains($err, 'connect'), $err); $cfgSet(['smtp_port' => '2525']);
+section('payment emails');
+$before = (int) val('SELECT COUNT(*) FROM {email_log}'); $r = notify_email($M, 'bill.paid', ['title' => 'Electricity', 'amount' => '₹2,400']); check('payment email sent', $r); eq((int) val('SELECT COUNT(*) FROM {email_log}'), $before + 1, 'and logged');
+check('per-payment choice "no" sends nothing', notify_email($M, 'bill.paid', ['title' => 'x'], false) === false); run('UPDATE {preferences} SET email_alerts=0 WHERE user_id=?', [$M]); check('person opted out: nothing sent', notify_email($M, 'bill.paid', ['title' => 'x']) === false); check('...unless they chose yes for this payment', notify_email($M, 'bill.paid', ['title' => 'x'], true)); run('UPDATE {preferences} SET email_alerts=1 WHERE user_id=?', [$M]);
+$cfgSet(['email_enabled' => '0']); check('global switch off: nothing sent', notify_email($M, 'bill.paid', ['title' => 'x']) === false); $cfgSet(['email_enabled' => '1']);
+$cfgSet(['feat_email_mode' => 'paid', 'feat_email_price' => '9900']); check('paid feature without a plan: no receipt', notify_email($M, 'bill.paid', ['title' => 'x']) === false); grant_feature($M, 'email', 30); check('...with a plan: receipt sent', notify_email($M, 'bill.paid', ['title' => 'x'])); $cfgSet(['feat_email_mode' => 'free']);
+if (is_resource($smtp)) { proc_terminate($smtp); proc_close($smtp); }
+section('Twilio SMS against a mock');
+$twState = sys_get_temp_dir() . '/mfnc_twilio_mock.json'; @unlink($twState); putenv('MFNC_TWILIO_BASE=http://127.0.0.1:8098');
+$tw = proc_open([PHP_BINARY, '-S', '127.0.0.1:8098', __DIR__ . '/twilio_mock.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $tp);
+for ($i = 0; $i < 30; $i++) { $fp = @fsockopen('127.0.0.1', 8098, $en, $es, 0.2); if ($fp) { fclose($fp); break; } usleep(100000); }
+$cfgSet(['sms_enabled' => '1', 'twilio_sid' => 'ACtest00000000', 'twilio_from' => '+15550001111', 'sms_auto_charges' => '1']); secret_set('twilio_token', 'tok_test');
+[$ok, $err] = send_sms('9876543210', 'Hello', $M, 'test'); check('SMS sent via Twilio REST', $ok, $err); $twDb = json_decode((string) @file_get_contents($twState), true) ?: []; eq($twDb[0]['to'] ?? '', '+919876543210', 'number normalised to E.164'); eq($twDb[0]['from'] ?? '', '+15550001111', 'from number used');
+[$ok, $err] = send_sms('12', 'x', $M); check('bad number refused before calling Twilio', !$ok); secret_set('twilio_token', 'wrong'); [$ok, $err] = send_sms('9876543210', 'x', $M); check('rejected credentials reported', !$ok && str_contains($err, 'Authenticate'), $err); secret_set('twilio_token', 'tok_test');
+run('UPDATE {preferences} SET phone=?, sms_alerts=1 WHERE user_id=?', ['+919876543210', $M]);
+$ch = ['id' => 77, 'title' => 'Phone bill', 'amount' => 125000, 'late_fee' => 0, 'late_fee_waived' => 0, 'due_date' => '2026-11-05']; [$ok] = sms_charge_alert($M, $ch, 'charge.new'); check('charge alert SMS sent', $ok);
+$last = (json_decode((string) @file_get_contents($twState), true) ?: [])[1 + 0] ?? null; $twDb = json_decode((string) @file_get_contents($twState), true); $last = end($twDb); check('SMS contains name, amount, due date and a payment link', str_contains($last['body'], 'Mom') && str_contains($last['body'], '₹1,250') && str_contains($last['body'], '5 Nov 2026') && str_contains($last['body'], 'https://finance.test/dues?charge=77'), $last['body']);
+run('UPDATE {preferences} SET sms_alerts=0 WHERE user_id=?', [$M]); [$ok] = sms_charge_alert($M, $ch, 'charge.new'); check('person who opted out gets no automatic SMS', !$ok); [$ok] = sms_charge_alert($M, $ch, 'charge.link', true); check('admin can still send a link on request', $ok);
+$cfgSet(['sms_enabled' => '0']); [$ok] = sms_charge_alert($M, $ch, 'charge.link', true); check('global switch off blocks SMS', !$ok);
+if (is_resource($tw)) { proc_terminate($tw); proc_close($tw); } putenv('MFNC_TWILIO_BASE');
+section('features, entitlements and wallet');
+$cfgSet(['feat_dock_mode' => 'free']); check('free feature open to all', feature_on($momU, 'dock'));
+$cfgSet(['feat_dock_mode' => 'paid', 'feat_dock_price' => '4900', 'feat_dock_days' => '30']); $fa = feature_access($momU, 'dock'); check('paid feature blocked without plan', !$fa['ok'] && $fa['code'] === 'plan'); check('admins are never blocked', feature_on($admU, 'dock'));
+$until = grant_feature($M, 'dock', 30); eq($until, day_after_n(today(), 30), 'plan grants 30 days'); check('paid feature open with plan', feature_on($momU, 'dock')); eq(grant_feature($M, 'dock', 10), day_after_n(today(), 40), 'renewal extends from the current end'); revoke_feature($M, 'dock'); check('revoked plan blocks again', !feature_on($momU, 'dock'));
+$cfgSet(['feat_ai_mode' => 'payg']); $fa = feature_access($momU, 'ai'); check('pay-as-you-go blocked at zero balance', !$fa['ok'] && $fa['code'] === 'wallet'); wallet_add($M, 5_000_000, 'topup', 'test', 'charge:t1'); check('top-up unlocks it', feature_on($momU, 'ai')); check('same top-up ref is applied once', !wallet_add($M, 5_000_000, 'topup', 'again', 'charge:t1')); eq(wallet_balance($M), 5_000_000, 'balance is exact (micro-rupees)');
+wallet_add($M, -5_000_000, 'usage', 'spent'); check('empty wallet blocks again', !feature_on($momU, 'ai'));
+$cfgSet(['feat_ai_mode' => 'free', 'feat_dock_mode' => 'free']);
+section('a paid plan bought through the gateway');
+$cid = create_self_charge($M, 'Dock · 30 days', 4900, ['feature' => 'dock', 'days' => 30]); eq(create_self_charge($M, 'Dock · 30 days', 4900, ['feature' => 'dock', 'days' => 30]), $cid, 'a second click reuses the open charge');
+$cfgSet(['feat_dock_mode' => 'paid']); check('not yet usable', !feature_on($momU, 'dock')); admin_charge_action($cid, 'paid', null); check('paying the charge grants the plan', feature_on($momU, 'dock')); $u1 = entitlement_until($M, 'dock'); after_charge_paid($cid, 'again'); eq(entitlement_until($M, 'dock'), $u1, 'applying the same payment twice does not extend twice');
+$tid = create_self_charge($M, 'Wallet top-up', 20000, ['topup_micro' => 200 * 10000]); $bal = wallet_balance($M); admin_charge_action($tid, 'paid', null); eq(wallet_balance($M), $bal + 2_000_000, 'paying a top-up credits the wallet'); after_charge_paid($tid, 'again'); eq(wallet_balance($M), $bal + 2_000_000, 'and only once'); $cfgSet(['feat_dock_mode' => 'free']);
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);

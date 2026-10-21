@@ -192,23 +192,6 @@ svg .bar:hover { filter: brightness(1.06); }
 .undo-row .when { font-size: 12px; color: var(--mute); }
 .undo-row.is-undone { opacity: .55; } .undo-row.is-undone .what { text-decoration: line-through; }
 .undo-pill { margin-left: auto; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--soft); }
-/* Dock (desktop) */
-.dock { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 45; display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px; border-radius: 26px; background: color-mix(in srgb, var(--card) 78%, transparent); backdrop-filter: blur(18px) saturate(1.4); box-shadow: var(--e3), 0 0 0 1px var(--line); }
-.dock-item { position: relative; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--soft); color: var(--ink); transition: transform .22s var(--ease), margin .22s var(--ease); transform-origin: 50% 100%; }
-.dock-item:hover, .dock-item:focus-visible { transform: translateY(-8px) scale(1.28); margin-inline: 6px; }
-.dock-item.is-active::after { content: ""; position: absolute; bottom: -7px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
-.dock-item[data-label]:hover::before { content: attr(data-label); position: absolute; bottom: calc(100% + 10px); padding: 4px 10px; border-radius: 8px; background: var(--ink); color: var(--card); font-size: 12px; white-space: nowrap; transform: scale(.78); }
-.dock-sep { width: 1px; align-self: stretch; margin: 6px 2px; background: var(--line-strong); }
-@media (max-width: 1023.98px) { .dock { display: none; } }
-/* Swipe rows: action colours (icon + label + colour, never colour alone) */
-.swipe { position: relative; overflow: hidden; touch-action: pan-y; }
-.swipe-fg { position: relative; z-index: 1; background: var(--card); will-change: transform; transition: transform .28s var(--ease); }
-.swipe.is-dragging .swipe-fg { transition: none; }
-.swipe-act { position: absolute; inset-block: 0; display: flex; align-items: center; gap: 8px; padding-inline: 22px; font-size: 13px; font-weight: 700; color: #fff; }
-.swipe-act.left { left: 0; background: #1f7a3a; } .swipe-act.right { right: 0; background: #b3261e; justify-content: flex-end; }
-.swipe-act.amber { background: #a65a05; } .swipe-act.neutral { background: #44403c; }
-.swipe-act svg { width: 20px; height: 20px; }
-.swipe.is-armed .swipe-act { filter: brightness(1.12); }
 /* Admin billing + settings screens */
 .plan-card { position: relative; padding: 22px; border-radius: var(--r-lg); background: var(--card); box-shadow: var(--e1), 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; }
 .plan-card.is-featured { box-shadow: var(--e2), 0 0 0 2px var(--ink); }

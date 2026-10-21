@@ -26,7 +26,7 @@
     function tick(now) {
       var dt = Math.min(0.032, (now - last) / 1000 || 0.016); last = now; var moving = false;
       for (var i = 0; i < items.length; i++) {
-        var s = st[i], tg = target(i), a = (-K * (s.v - tg) - C * s.vel) / M; s.vel += a * dt; s.v += s.vel * dt;
+        var s = st[i], tg = target(i); for (var n = 0, h = dt / 8; n < 8; n++) { s.vel += ((-K * (s.v - tg) - C * s.vel) / M) * h; s.v += s.vel * h; } // sub-stepped so the stiff spring stays stable
         if (Math.abs(s.v - tg) > 0.05 || Math.abs(s.vel) > 0.05) moving = true; else { s.v = tg; s.vel = 0; } apply(i);
       }
       raf = moving ? requestAnimationFrame(tick) : 0;
