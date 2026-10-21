@@ -51,11 +51,17 @@ function email_html(string $text): string {
     return '<!doctype html><html><body style="margin:0;background:#f5f5f3;font-family:Arial,Helvetica,sans-serif;color:#141414"><div style="max-width:520px;margin:0 auto;padding:24px"><div style="background:#fff;border-radius:16px;padding:24px;line-height:1.55;font-size:15px">' . $body . '</div></div></body></html>';
 }
 /** Builds the raw message (headers + multipart body), CRLF line ends. */
-function build_mime(string $from, string $fromName, string $to, string $subject, string $text, string $html, string $host = ''): string {
+function build_mime(string $from, string $fromName, string $to, string $subject, string $text, string $html, string $host = '', array $attachments = []): string {
     $b = 'mfnc_' . bin2hex(random_bytes(8)); $domain = substr(strrchr($from, '@') ?: '@localhost', 1);
     $h = ['Date: ' . date('r'), 'From: ' . ($fromName !== '' ? mime_header(clean_header($fromName)) . ' <' . clean_header($from) . '>' : clean_header($from)), 'To: ' . clean_header($to), 'Subject: ' . mime_header(clean_header($subject)),
         'Message-ID: <' . bin2hex(random_bytes(10)) . '@' . $domain . '>', 'MIME-Version: 1.0', 'Content-Type: multipart/alternative; boundary="' . $b . '"', 'X-Mailer: Moms Finance'];
     $part = fn($type, $c) => "--$b\r\nContent-Type: $type; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($c), 76, "\r\n");
+    if ($attachments) { // [['name' => 'report.pdf', 'type' => 'application/pdf', 'data' => bytes], ...]: multipart/mixed wrapping the text + html alternative
+        $m = 'mfnc_m' . bin2hex(random_bytes(8)); $h[6] = 'Content-Type: multipart/mixed; boundary="' . $m . '"';
+        $o = implode("\r\n", $h) . "\r\n\r\n--$m\r\nContent-Type: multipart/alternative; boundary=\"$b\"\r\n\r\n" . $part('text/plain', $text) . $part('text/html', $html) . "--$b--\r\n";
+        foreach ($attachments as $a) { $n = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) ($a['name'] ?? 'file')); $o .= "--$m\r\nContent-Type: " . preg_replace('/[^a-z0-9.+\/-]/i', '', (string) ($a['type'] ?? 'application/octet-stream')) . "; name=\"$n\"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"$n\"\r\n\r\n" . chunk_split(base64_encode((string) ($a['data'] ?? '')), 76, "\r\n"); }
+        return $o . "--$m--\r\n";
+    }
     return implode("\r\n", $h) . "\r\n\r\n" . $part('text/plain', $text) . $part('text/html', $html) . "--$b--\r\n";
 }
 /** Minimal SMTP client: EHLO, STARTTLS / implicit TLS, AUTH PLAIN|LOGIN, one message. Throws RuntimeException with the server's words. */
@@ -87,14 +93,14 @@ function smtp_send(array $c, string $to, string $raw): void {
     } finally { @fclose($fp); }
 }
 /** Sends one email now and logs it. Returns [ok, error]. Never throws. */
-function send_email(string $to, string $subject, string $text, ?int $uid = null, string $event = ''): array {
+function send_email(string $to, string $subject, string $text, ?int $uid = null, string $event = '', array $attachments = []): array {
     $c = email_cfg();
     $log = function (string $status, ?string $err) use ($uid, $to, $subject, $event) { try { run('INSERT INTO {email_log} (user_id,to_email,subject,event,status,error) VALUES (?,?,?,?,?,?)', [$uid, mb_substr($to, 0, 190), mb_substr($subject, 0, 250), $event, $status, $err ? mb_substr($err, 0, 400) : null]); } catch (Throwable) {} };
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) { $log('failed', 'Invalid recipient address'); return [false, 'Invalid recipient address.']; }
     if (!email_configured($c)) { $log('skipped', 'Email is not configured'); return [false, 'Email is not configured yet.']; }
     try {
         if (getenv('MFNC_MAIL_DRYRUN')) { $log('sent', null); return [true, '']; }
-        $raw = build_mime($c['from'], $c['from_name'], $to, $subject, $text, email_html($text));
+        $raw = build_mime($c['from'], $c['from_name'], $to, $subject, $text, email_html($text), '', $attachments);
         if ($c['transport'] === 'mail') {
             $pos = strpos($raw, "\r\n\r\n"); $hdr = substr($raw, 0, $pos); $body = substr($raw, $pos + 4);
             $hdr = implode("\r\n", array_filter(explode("\r\n", $hdr), fn($l) => !preg_match('/^(To|Subject):/i', $l)));

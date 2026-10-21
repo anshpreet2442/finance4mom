@@ -27,7 +27,7 @@ function page_reports(): void {
     $sevIcon = ['danger' => ['circle-x', 'text-neg'], 'warning' => ['triangle-alert', 'text-orange-dk'], 'info' => ['info', 'text-mute'], 'good' => ['circle-check', 'text-lime-dk']];
 
     layout_start('Reports & Insights', 'reports', $s);
-    page_header('Reports & Insights', 'Plain-language checks on your money, each with the calculation behind it.', month_nav($month, '/reports'));
+    page_header('Reports & Insights', 'Plain-language checks on your money, each with the calculation behind it.', month_nav($month, '/reports') . pdf_actions_html(current_user(), 'report', $month));
     card_open('Insights', 'Rule-based, from your own numbers');
     if (!$insights) { echo '<p class="text-sm text-mute">Nothing needs attention right now. Insights appear as you add transactions, budgets, bills and goals.</p>'; }
     else { echo '<ul class="divide-y divide-line">'; foreach ($insights as $i) { [$ic, $cl] = $sevIcon[$i['sev']];

@@ -38,6 +38,7 @@ function page_analysis(): void {
       <div class="rounded-2xl bg-soft px-2 py-3"><dt class="text-xs text-mute">Entries</dt><dd class="num mt-1 font-semibold"><?= $a['count'] ?></dd></div>
       <div class="rounded-2xl bg-soft px-2 py-3"><dt class="text-xs text-mute">Largest</dt><dd class="num mt-1 font-semibold"><?= $a['biggest'] ? e(fmt_short($a['biggest'][0]['amount'])) : '—' ?></dd></div>
     </dl>
+    <div class="mx-6 mt-4 flex flex-wrap justify-center gap-2"><?= pdf_actions_html($u, 'analysis', $month) ?></div>
     <div class="mt-6 px-6"><h3 class="mb-2 text-sm font-semibold">Share by category</h3>
       <ul class="divide-y divide-line"><?php foreach (array_slice($a['cats'], 0, 8) as $c): $pct = $a['total'] > 0 ? $c['value'] / $a['total'] * 100 : 0; ?>
         <li class="py-2.5 text-sm"><div class="mb-1.5 flex items-center justify-between gap-2"><span class="flex min-w-0 items-center gap-2"><span class="grid size-8 shrink-0 place-items-center rounded-full bg-soft"><?= icon(cat_icon($c['name']), 'size-4') ?></span><span class="truncate"><?= e($c['name']) ?></span></span><span class="num shrink-0 text-xs text-mute"><?= number_format($pct, 1) ?>% · <?= e(fmt($c['value'])) ?></span></div><?= progress($pct, 'lime', $c['name'] . ' share') ?></li><?php endforeach; ?>
