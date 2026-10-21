@@ -81,6 +81,8 @@ function c_route(string $path): void {
     if (preg_match('~^/s/([A-Za-z0-9_-]{16,64})(?:/(og\.png|qr\.svg))?$~', $path, $x)) { share_public($x[1], $x[2] ?? ''); exit; }
     if (preg_match('~^/pdf/shared/([A-Za-z0-9_.-]{20,400})$~', $path, $x)) { pdf_shared_download($x[1]); exit; }
     if ($m === 'POST') {
+        if ($path === '/import/b64') { upfb_http('import'); }
+        if ($path === '/ai/upload/b64') { upfb_http('ai'); }
         if ($path === '/layout/api') { layout_api(); }
         if ($path === '/layout/ai') { layout_ai_http(); }
         if ($path === '/voice/tts') { voice_http_tts(); }

@@ -112,9 +112,18 @@
           if (have >= data.upload.max_files) { keep = 'You can attach up to ' + data.upload.max_files + ' files per message. The extra ones were not added.'; bar.setNotice(keep); return; }
           if (f.size > data.upload.max_bytes) { keep = f.name + ' is too big (limit ' + Math.round(data.upload.max_bytes / 1048576) + ' MB).'; bar.setNotice(keep); return; } have++;
           var h = bar.addAttachment({ name: f.name, status: 'uploading' }), fd = new FormData(); fd.append('file', f);
-          fetch(data.endpoints.upload, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf() }, body: fd }).then(function (r) { return r.json().catch(function () { return { type: 'error', message: 'Upload failed.' }; }); })
-            .then(function (j) { if (j.type === 'ok') { h.update({ id: j.id, name: j.name, status: 'ready' }); bar.setNotice(keep); } else { bar.setNotice(j.message || 'Upload failed.'); h.remove(); } })
-            .catch(function () { bar.setNotice('Upload failed. Check your connection.'); h.remove(); });
+          // normal upload first; when a hosting firewall refuses it (403 page that is not ours, dropped connection, 413) the same file is sent as base64 text parts
+          function viaText() {
+            if (!w.MfncUpfb || !data.endpoints.upload_b64) { bar.setNotice('The web host blocked the upload. Ask the host to allow POST /ai/upload, or try a smaller file.'); h.remove(); return; }
+            w.MfncUpfb.bytesOf(f).then(function (bytes) { return w.MfncUpfb.sendBytes(bytes, { endpoint: data.endpoints.upload_b64, csrf: csrf(), kind: 'ai', name: f.name }); })
+              .then(function (j) { if (j && j.type === 'ok') { h.update({ id: j.id, name: j.name, status: 'ready' }); bar.setNotice(keep); } else { bar.setNotice((j && j.message) || 'Upload failed.'); h.remove(); } },
+                function (er) { bar.setNotice(er && er.server ? er.message : 'Your web host’s firewall blocked this upload, even as text. Try a smaller file or a different format.'); h.remove(); });
+          }
+          fetch(data.endpoints.upload, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf() }, body: fd }).then(function (r) {
+            if (!r.headers.get('X-Mfnc-App') && w.MfncUpfb && w.MfncUpfb.blocked(r.status, r.headers)) { return 'blocked'; }
+            return r.json().catch(function () { return { type: 'error', message: 'Upload failed.' }; });
+          }).then(function (j) { if (j === 'blocked') { viaText(); return; } if (j.type === 'ok') { h.update({ id: j.id, name: j.name, status: 'ready' }); bar.setNotice(keep); } else { bar.setNotice(j.message || 'Upload failed.'); h.remove(); } })
+            .catch(function () { viaText(); });
         });
       };
       fi.click();

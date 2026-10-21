@@ -11,9 +11,9 @@ function page_import(): void {
     $max = import_upload_max();
     echo '<div class="imp-wrap"><section class="card imp-card"><h2 class="imp-h">' . icon('upload', 'size-5') . ' Upload a statement</h2>'
         . '<p class="imp-p">Nothing is saved yet. You will see exactly what was found, check it against the statement\'s own totals, and choose accounts and categories before anything is added.</p>'
-        . form_open('import-upload', 'imp-up', true) . '<label class="label" for="imp-file">Statement file</label><input id="imp-file" class="input" type="file" name="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required data-max="' . $max . '">'
+        . str_replace('<form ', '<form data-b64="' . e(url('/import/b64')) . '" ', form_open('import-upload', 'imp-up', true)) . '<label class="label" for="imp-file">Statement file</label><input id="imp-file" class="input" type="file" name="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required data-max="' . $max . '">'
         . '<p class="imp-hint">.xlsx or .csv, up to ' . max(1, (int) round($max / 1048576)) . ' MB. The file is read on the server and not kept; the parsed preview is deleted after an hour or when you finish.</p>'
-        . '<p class="imp-err" data-imp-err role="alert" hidden></p><button class="btn btn-primary" data-imp-upload>' . icon('search', 'size-4') . ' Read statement</button></form></section>';
+        . '<div class="imp-prog" data-imp-prog hidden aria-live="polite"></div><p class="imp-err" data-imp-err role="alert" hidden></p><button class="btn btn-primary" data-imp-upload>' . icon('search', 'size-4') . ' Read statement</button></form></section>';
     echo '<section class="card imp-card"><h2 class="imp-h">' . icon('file', 'size-5') . ' Supported statements</h2><ul class="imp-src">';
     foreach (import_adapters() as $a) { echo '<li>' . import_badge(['source' => $a['key']], 'src', true) . '<span class="imp-src__t"><b>' . e($a['title'] ?? $a['label']) . '</b><span>' . e($a['accept'] ?? '') . '</span></span></li>'; }
     echo '</ul><p class="imp-p">Other apps (PhonePe, Google Pay, bank CSV files) can be added without changing anything else. A CSV with the same column headings as the Paytm sheet also works.</p></section></div>';

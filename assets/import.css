@@ -123,3 +123,15 @@
 .imp-dl { display: grid; gap: .4rem; margin: 0 0 1.2rem; text-align: left; } .imp-dl > div { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--line); font-size: .88rem; } .imp-dl dt { color: var(--mute); } .imp-dl dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
 .imp-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { .imp-chk i { transition: none; } }
+
+/* ---------- upload progress and the "blocked by the host" explanation ---------- */
+.imp-prog { margin: .6rem 0 .2rem; }
+.imp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font-size: .84rem; color: var(--mute); }
+.imp-steps li { position: relative; padding-left: 1.5rem; line-height: 1.4; }
+.imp-steps li::before { content: ""; position: absolute; left: .15rem; top: .38em; width: .7rem; height: .7rem; border-radius: 50%; border: 2px solid var(--line); }
+.imp-steps li.is-run::before { border-color: var(--lime-dk, #0b6b4d) transparent var(--lime-dk, #0b6b4d) transparent; animation: imp-spin .8s linear infinite; }
+.imp-steps li.is-ok { color: var(--ink); } .imp-steps li.is-ok::before { background: var(--lime-dk, #0b6b4d); border-color: var(--lime-dk, #0b6b4d); }
+.imp-steps li.is-bad::before { background: #c0392b; border-color: #c0392b; }
+@keyframes imp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .imp-steps li.is-run::before { animation: none; } }
+.imp-err[data-imp-err] { line-height: 1.5; } .imp-err a { text-decoration: underline; font-weight: 600; }

@@ -2,18 +2,69 @@
    Progressive: without JavaScript the preview form still posts (every row ticked, mapping selects as shown). */
 (function () {
   'use strict';
-  var d = document;
+  var d = document, w = window;
   function $(s, r) { return (r || d).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || d).querySelectorAll(s)); }
   var money = function (minor) { var loc = d.body.getAttribute('data-locale') || 'en-IN', sym = d.body.getAttribute('data-symbol') || '₹'; try { return sym + new Intl.NumberFormat(loc, { maximumFractionDigits: 2, minimumFractionDigits: minor % 100 ? 2 : 0 }).format(minor / 100); } catch (e) { return sym + (minor / 100).toFixed(2); } };
 
-  // ---------- upload form: size check before the browser sends megabytes ----------
+  // ---------- upload form: size check, then the upload with automatic fallbacks when a hosting firewall refuses it ----------
+  // 1) normal multipart POST  2) the same bytes as base64 text parts  3) the browser reads the .xlsx itself and sends only the rows (server re-validates)  4) a clear explanation
+  function el(tag, cls, text) { var n = d.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
+  function stepList(box) {
+    box.hidden = false; box.textContent = ''; var ul = el('ul', 'imp-steps'); box.appendChild(ul);
+    return function add(text, state) { var li = el('li', state ? 'is-' + state : '', text); ul.appendChild(li); return function (t, st) { if (t) li.textContent = t; li.className = st ? 'is-' + st : ''; }; };
+  }
+  function blockedHelp(err, tried, jsonUrl) {
+    err.hidden = false; err.textContent = '';
+    err.appendChild(el('b', '', 'Your web host’s firewall blocked this upload.'));
+    err.appendChild(el('span', '', ' The page you saw (“403 Forbidden – Access to this resource on the server is denied”) comes from the hosting security system, not from this app and not from your file. Nothing was saved. We tried: ' + tried.join('; ') + '.'));
+    var p = el('span', 'imp-err__next'); p.appendChild(d.createTextNode(' What you can do: '));
+    var a = el('a', '', 'use the “Use your own AI” JSON import'); a.href = jsonUrl || '#json'; p.appendChild(a);
+    p.appendChild(d.createTextNode(' (it pastes plain text, which the firewall lets through), or ask your host to allow POST /do/import-upload and give them the rule id from their Imunify360 / ModSecurity log (see README, “Troubleshooting uploads”).')); err.appendChild(p);
+  }
   function uploadForm() {
     var f = $('input[type=file][data-max]'); if (!f || f._imp) return; f._imp = 1;
-    var err = $('[data-imp-err]'), form = f.form;
+    var err = $('[data-imp-err]'), form = f.form, prog = $('[data-imp-prog]'), csrf = $('input[name=_csrf]', form), btn = $('[data-imp-upload]', form);
     function show(m) { if (err) { err.textContent = m || ''; err.hidden = !m; } }
-    f.addEventListener('change', function () { var file = f.files && f.files[0]; show(''); if (file && file.size > +f.getAttribute('data-max')) { show('That file is ' + (file.size / 1048576).toFixed(1) + ' MB; the limit is ' + (+f.getAttribute('data-max') / 1048576).toFixed(0) + ' MB.'); f.value = ''; } });
-    form.addEventListener('submit', function (e) { var b = $('[data-imp-upload]', form); if (b) { if (b.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; } b.setAttribute('aria-busy', 'true'); } });
+    f.addEventListener('change', function () { var file = f.files && f.files[0]; show(''); if (prog) prog.hidden = true; if (file && file.size > 8 * 1048576) { show('That file is ' + (file.size / 1048576).toFixed(1) + ' MB; the limit is 8 MB.'); f.value = ''; } });
+    function busy(on) { if (btn) { if (on) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy'); } }
+    form.addEventListener('submit', function (e) {
+      if (btn && btn.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+      var file = f.files && f.files[0];
+      if (!file || !w.fetch || !w.MfncUpfb || !prog) { busy(true); return; }   // no JavaScript help: the plain form post still works
+      e.preventDefault(); busy(true); show(''); var add = stepList(prog), tried = [], tok = csrf ? csrf.value : '';
+      var done = function (url) { w.location.href = url; };
+      var failMsg = function (m) { show(m); busy(false); };
+      var jsonUrl = (d.querySelector('[data-imp-jsonlink]') || {}).href || '#json';
+      var s1 = add('Uploading ' + file.name + '…', 'run');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'X-Mfnc-Spa': '1', 'X-Requested-With': 'fetch' }, body: fd }).then(function (r) {
+        if (r.status === 204 && r.headers.get('X-Mfnc-Redirect')) { s1('Uploaded.', 'ok'); done(r.headers.get('X-Mfnc-Redirect')); return; }
+        if (w.MfncUpfb.blocked(r.status, r.headers)) { s1('The host refused the normal upload (HTTP ' + r.status + ').', 'bad'); tried.push('the normal upload (HTTP ' + r.status + ')'); return fallback(); }
+        // our own answer that is not a redirect (for example a page-expired notice): let the normal form handle and show it
+        s1('', 'ok'); busy(false); form.submit();
+      }, function () { s1('The connection was cut during the normal upload.', 'bad'); tried.push('the normal upload (connection reset)'); return fallback(); });
+      function fallback() {
+        var s2 = add('Sending the file as plain text instead…', 'run');
+        return w.MfncUpfb.bytesOf(file).then(function (bytes) {
+          return w.MfncUpfb.sendBytes(bytes, { endpoint: form.getAttribute('data-b64'), csrf: tok, kind: 'statement', name: file.name, onProgress: function (p) { s2('Sending the file as plain text… ' + Math.round(p * 100) + '%', 'run'); }, onStep: function (t) { s2(t, 'run'); } });
+        }).then(function (j) { s2('Sent as text.', 'ok'); done(j.redirect); }, function (er) {
+          if (er && er.server) { s2('Sent as text, but the file was refused.', 'bad'); failMsg(er.message); return; }
+          s2('The text upload was blocked too.', 'bad'); tried.push('the file as plain text'); return clientParse();
+        });
+      }
+      function clientParse() {
+        if (!/\.xlsx$/i.test(file.name)) { return blocked(); }
+        var s3 = add('Reading the workbook in your browser and sending only the rows…', 'run');
+        return w.MfncUpfb.parseXlsx(file).then(function (parsed) {
+          return w.MfncUpfb.sendRows(parsed, { endpoint: form.getAttribute('data-b64'), csrf: tok, name: file.name, onStep: function (t) { s3(t, 'run'); } });
+        }).then(function (j) { s3('Read in your browser. Please check the preview carefully.', 'ok'); done(j.redirect); }, function (er) {
+          if (er && er.server) { s3('The rows were sent, but not accepted.', 'bad'); failMsg(er.message); return; }
+          s3((er && er.blocked) ? 'That was blocked as well.' : 'Could not read the workbook in the browser (' + ((er && er.message) || 'unknown') + ').', 'bad'); tried.push('reading it in your browser'); return blocked();
+        });
+      }
+      function blocked() { busy(false); blockedHelp(err, tried, jsonUrl); }
+    });
   }
 
   // ---------- preview ----------

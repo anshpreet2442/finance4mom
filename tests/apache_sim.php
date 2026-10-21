@@ -3,21 +3,21 @@
 // It stands in for what sits in front of index.php on the real shared host:
 //   1. .htaccess `Header` rules (always set / setifempty / append) applied to the response the way mod_headers does, so duplicate or overridden headers show up;
 //   2. a hosting WAF (Imunify360 / ModSecurity style). SIM_WAF=1 refuses multipart/form-data uploads that contain a zip ("PK\x03\x04");
-//      SIM_WAF=2 also refuses any body that contains the base64 of a zip ("UEsD") or its reversed form; SIM_WAF=3 also refuses JSON/urlencoded bodies that carry "sheets" (client-parsed rows).
+//      SIM_WAF=2 also refuses any body that contains the base64 of a zip ("UEsD") or its reversed form; SIM_WAF=3 also refuses every text upload that carries a payload (nothing but the explanation is left).
 //   3. static files and the "everything else goes to index.php" rewrite, like the project's .htaccess.
 $p = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
 $root = dirname(__DIR__);
 $f = $root . $p;
 if ($p !== '/' && is_file($f) && !str_ends_with($f, '.php') && !preg_match('#^/(app|tools|tests)/#', $p)) { return false; }
 
-$level = (int) (getenv('SIM_WAF') ?: 0);
+$level = (int) (getenv('SIM_WAF') ?: 0); if (getenv('SIM_LOG')) { file_put_contents(getenv('SIM_LOG'), date('H:i:s') . " L$level " . ($_SERVER['REQUEST_METHOD'] ?? '') . ' ' . $p . ' ' . strlen((string) file_get_contents('php://input')) . "\n", FILE_APPEND); }
 if ($level > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $ct = strtolower($_SERVER['CONTENT_TYPE'] ?? ''); $hit = false;
     if (str_contains($ct, 'multipart/form-data')) { foreach ($_FILES as $fl) { foreach ((array) ($fl['tmp_name'] ?? []) as $t) { if (is_string($t) && is_file($t) && str_starts_with((string) file_get_contents($t, false, null, 0, 4), "PK\x03\x04")) { $hit = true; } } } }
     if ($level >= 2) {
         $body = (string) file_get_contents('php://input'); $all = $body . ' ' . http_build_query($_POST);
         if (str_contains($all, 'UEsD') || str_contains($all, 'DsEU')) { $hit = true; }
-        if ($level >= 3 && (str_contains($all, '%22sheets%22') || str_contains($all, '"sheets"') || str_contains($all, 'sheets'))) { $hit = true; }
+        if ($level >= 3 && (strlen((string) ($_POST['data'] ?? '')) > 200 || str_contains($body, '"data"'))) { $hit = true; }   // level 3: every text upload carrying a payload is refused too
     }
     if ($hit) { http_response_code(403); header('Content-Type: text/html'); echo "<html><head><title>403 Forbidden</title></head><body><h1>403 Forbidden</h1><p>Access to this resource on the server is denied!</p></body></html>"; return true; }
 }

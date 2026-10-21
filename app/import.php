@@ -45,7 +45,11 @@ function import_handle_upload(int $uid, array $f): string {
     if ($err === UPLOAD_ERR_NO_FILE) { throw new UserError('Choose the statement file first.'); }
     if ($err !== 0 || empty($f['tmp_name']) || !is_file((string) $f['tmp_name'])) { throw new UserError('The upload did not finish. Please try again.'); }
     $name = mb_substr(trim((string) preg_replace('/[^\p{L}\p{N} ._\-()]/u', '', basename((string) ($f['name'] ?? 'statement')))), 0, 120) ?: 'statement';
-    $wb = workbook_load((string) $f['tmp_name'], $name);
+    return import_handle_workbook($uid, workbook_load((string) $f['tmp_name'], $name), $name);
+}
+/** A workbook structure (from xlsx_read/csv_read, or rebuilt from rows a browser read) -> adapter -> stored preview token. $rate adds the upload rate limit (the file path already counted it). */
+function import_handle_workbook(int $uid, array $wb, string $name, bool $rate = false): string {
+    if ($rate && !c_rate_ok('imp-up:' . $uid, 12, 3600)) { throw new UserError('You have uploaded a lot of files this hour. Please try again a little later.'); }
     $stmt = import_parse_workbook($wb);
     $stmt['file'] = ['name' => $name, 'kind' => $wb['kind'], 'sheets_total' => count($wb['sheets'])];
     return import_store_preview($uid, $name, $stmt);
