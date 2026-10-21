@@ -3,7 +3,7 @@
 .mf-ring {
   --ring-size: 96px; --ring-ms: 1s;
   --ring-tone: var(--lime);                                               /* primary arc by state */
-  --ring-track: color-mix(in srgb, var(--ink) 10%, transparent);          /* "rgba(0,0,0,0.1)" in light, the same idea in dark */
+  --ring-track: color-mix(in srgb, var(--ink) 14%, transparent);          /* the original uses rgba(0,0,0,0.1); a touch stronger so it stays visible on the app's soft cards */
   --q: var(--p, 0);                                                       /* percent the arc is drawn at (0 until the ring is first seen) */
   position: relative; display: inline-grid; place-items: center; flex: none; vertical-align: middle;
   width: var(--ring-size); height: var(--ring-size); aspect-ratio: 1; color: var(--ink); font-weight: 600; transform: translateZ(0);
@@ -45,3 +45,12 @@
 .ring-row { display: flex; flex-wrap: wrap; gap: 20px 24px; align-items: flex-start; }
 .ring-list { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .ring-chip { display: inline-flex; align-items: center; gap: 10px; }
+/* places that host a ring */
+.ai-chat__tools .ai-budget { display: inline-grid; place-items: center; width: 44px; height: 44px; }
+.imp-rec { position: relative; } .imp-recring { float: right; margin: 0 0 8px 14px; }
+@media (max-width: 480px) { .imp-recring { --ring-size: 64px; } }
+.imp-upring { float: right; margin: 0 0 6px 10px; }
+/* expenses page: one row per category (ring | name and amounts | actions; the actions drop under the name on phones) */
+.exp-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 16px; padding: 14px 0; }
+.exp-row__act { grid-column: 1 / -1; flex-wrap: wrap; }
+@media (min-width: 640px) { .exp-row { grid-template-columns: auto minmax(0, 1fr) auto; } .exp-row__act { grid-column: auto; } }

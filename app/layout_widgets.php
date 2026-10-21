@@ -43,9 +43,9 @@ function lw_w_limit(array $c): string {
     extract($c);  ob_start(); ?>
       <?php card_open('Monthly spending limit', 'Remaining monthly budget', '<a href="' . e(url('/expenses')) . '" class="btn btn-icon btn-sm" aria-label="Edit budgets">' . icon('pencil', 'size-4') . '</a>'); ?>
         <?php if ($d['has_budgets']): $left = $d['total_budget'] - $d['budget_spent']; ?>
-          <?= progress($d['total_budget'] ? $d['budget_spent'] / $d['total_budget'] * 100 : 0, $left < 0 ? 'neg' : 'lime', 'Budget used') ?>
-          <div class="num mt-3 flex items-baseline justify-between"><span class="text-xl font-semibold"><?= e(fmt($d['budget_spent'])) ?></span><span class="text-sm text-mute">of <?= e(fmt($d['total_budget'])) ?></span></div>
-          <p class="mt-1 text-sm <?= $left < 0 ? 'text-neg' : 'text-mute' ?>"><?= $left < 0 ? e(fmt(-$left)) . ' over your budgets' : e(fmt($left)) . ' left to spend' ?></p>
+          <div class="ring-card"><?= ring($d['total_budget'] ? $d['budget_spent'] / $d['total_budget'] * 100 : 0, ['limit' => true, 'size' => 'lg', 'label' => 'Budget used', 'sub' => 'used']) ?>
+            <div class="min-w-0"><div class="num flex flex-wrap items-baseline gap-x-2"><span class="text-xl font-semibold"><?= e(fmt($d['budget_spent'])) ?></span><span class="text-sm text-mute">of <?= e(fmt($d['total_budget'])) ?></span></div>
+              <p class="mt-1 text-sm <?= $left < 0 ? 'text-neg' : 'text-mute' ?>"><?= $left < 0 ? e(fmt(-$left)) . ' over your budgets' : e(fmt($left)) . ' left to spend' ?></p></div></div>
         <?php else: ?><p class="text-sm text-mute">Set a monthly budget for your categories to see how much you can still spend.</p><a class="btn btn-sm mt-3" href="<?= e(url('/expenses')) ?>">Set budgets</a><?php endif; ?>
       <?php card_close(); ?>
 <?php return (string) ob_get_clean();
@@ -84,9 +84,9 @@ function lw_w_goals(array $c): string {
     extract($c);  ob_start(); ?>
       <?php card_open('Goal tracker', $d['goals'] ? ($d['behind_count'] ? $d['behind_count'] . ' behind schedule' : 'All on track') : '', '<a href="' . e(url('/goals')) . '" class="btn btn-sm">' . icon('plus', 'size-4') . ' Goals</a>'); ?>
         <?php $lt = array_values(array_filter($d['goals'], fn($g) => $g['kind'] === 'long-term')); if (!$lt): ?><p class="py-4 text-sm text-mute">Create a savings goal to track progress.</p><?php else: ?>
-        <ul class="space-y-4"><?php foreach (array_slice($lt, 0, 4) as $g): ?><li><div class="mb-1.5 flex items-center justify-between gap-2 text-sm"><span class="truncate font-medium"><?= e($g['name']) ?></span><span class="num shrink-0 text-xs text-mute"><?= e(fmt_short($g['saved'])) ?> / <?= e(fmt_short($g['target_amount'])) ?></span></div>
-          <?= progress($g['percent'], $g['complete'] ? 'dark' : ($g['behind'] ? 'orange' : 'lime'), $g['name'] . ' progress') ?>
-          <p class="mt-1 text-xs text-mute"><?= $g['complete'] ? 'Goal reached' : ($g['behind'] ? 'Behind schedule' : e(fmt($g['remaining'])) . ' to go') ?></p></li><?php endforeach; ?></ul><?php endif; ?>
+        <ul class="space-y-4"><?php foreach (array_slice($lt, 0, 4) as $g): ?><li class="ring-card"><?= ring($g['percent'], ['size' => 'sm', 'tone' => $g['complete'] ? 'done' : ($g['behind'] ? 'warn' : 'auto'), 'label' => $g['name'] . ' progress']) ?>
+          <div class="min-w-0 flex-1"><div class="flex items-center justify-between gap-2 text-sm"><span class="truncate font-medium"><?= e($g['name']) ?></span><span class="num shrink-0 text-xs text-mute"><?= e(fmt_short($g['saved'])) ?> / <?= e(fmt_short($g['target_amount'])) ?></span></div>
+          <p class="mt-1 text-xs text-mute"><?= $g['complete'] ? 'Goal reached' : ($g['behind'] ? 'Behind schedule' : e(fmt($g['remaining'])) . ' to go') ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
       <?php card_close(); ?>
 <?php return (string) ob_get_clean();
 }
@@ -157,8 +157,9 @@ function lw_w_milestones(array $c): string {
     extract($c);  ob_start(); ?>
     <?php card_open('Savings milestones'); ?>
       <?php if (!$d['milestones']): ?><p class="text-sm text-mute">Add target dates to goals and purchases to see milestones.</p><?php else: ?>
-      <ul class="space-y-4"><?php foreach ($d['milestones'] as $m): ?><li class="text-sm"><div class="mb-1.5 flex justify-between gap-2"><span class="truncate font-medium"><?= e($m['name']) ?></span><span class="num shrink-0 text-xs text-mute"><?= e(date_label($m['date'])) ?></span></div>
-        <?= progress($m['percent'], $m['behind'] ? 'orange' : 'lime', $m['name'] . ' progress') ?><p class="mt-1 text-xs text-mute"><?= e(fmt($m['remaining'])) ?> to go<?= $m['behind'] ? ' · behind schedule' : '' ?></p></li><?php endforeach; ?></ul><?php endif; ?>
+      <ul class="space-y-4"><?php foreach ($d['milestones'] as $m): ?><li class="ring-card text-sm"><?= ring($m['percent'], ['size' => 'sm', 'tone' => $m['behind'] ? 'warn' : 'auto', 'label' => $m['name'] . ' progress']) ?>
+        <div class="min-w-0 flex-1"><div class="flex justify-between gap-2"><span class="truncate font-medium"><?= e($m['name']) ?></span><span class="num shrink-0 text-xs text-mute"><?= e(date_label($m['date'])) ?></span></div>
+        <p class="mt-1 text-xs text-mute"><?= e(fmt($m['remaining'])) ?> to go<?= $m['behind'] ? ' · behind schedule' : '' ?></p></div></li><?php endforeach; ?></ul><?php endif; ?>
     <?php card_close(); ?>
 <?php return (string) ob_get_clean();
 }

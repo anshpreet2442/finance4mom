@@ -94,6 +94,6 @@ function page_plans(): void {
     card_close();
     $l = all('SELECT created_at,kind,amount_micro,note FROM {wallet_ledger} WHERE user_id=? AND NOT (kind=? AND amount_micro=0) ORDER BY id DESC LIMIT 15', [$uid, 'adjust']);
     if ($l) { card_flush_open('Wallet activity'); echo '<ul class="divide-y divide-line px-6 pb-3 text-sm">'; foreach ($l as $r) { echo '<li class="flex items-center justify-between gap-3 py-2.5"><span class="min-w-0"><span class="block truncate">' . e($r['note'] ?: ucfirst($r['kind'])) . '</span><span class="text-xs text-mute">' . e(substr($r['created_at'], 0, 16)) . ' UTC</span></span><span class="num font-medium ' . ($r['amount_micro'] < 0 ? '' : 'text-lime-dk') . '">' . ($r['amount_micro'] < 0 ? '−' : '+') . e(micro_to_inr(abs((int) $r['amount_micro']))) . '</span></li>'; } echo '</ul></div></section>'; }
-    $sp = ai_month_spend($uid); $bu = ai_budget($uid); if ($sp > 0 || $bu > 0) { card_open('AI usage this month', ''); echo '<p class="num text-xl font-semibold">' . e(micro_to_inr($sp)) . '<span class="text-sm font-normal text-mute">' . ($bu ? ' of ' . e(micro_to_inr($bu)) . ' budget' : '') . '</span></p>' . ($bu ? '<div class="mt-2">' . progress(min(100, $sp / $bu * 100), $sp >= $bu ? 'neg' : 'lime', 'AI budget used') . '</div>' : ''); card_close(); }
+    echo usage_meters_html($u);   // rings: AI budget, voice limits, wallet credit left (app/ring.php)
     echo '</div></div>'; layout_end();
 }

@@ -35,7 +35,7 @@ function ring(float $value, array $o = []): string {
     $now = max((float) $o['min'], min((float) $o['max'], $value));
     return '<div class="mf-ring' . $cls . ($o['sub'] !== '' ? ' mf-ring--has-sub' : '') . ($o['class'] !== '' ? ' ' . e((string) $o['class']) : '') . '"' . $attrs . ' data-state="' . e($tone) . '" style="' . e($style) . '" role="progressbar" aria-valuenow="' . e((string) round($now, 2)) . '" aria-valuemin="' . e((string) $o['min']) . '" aria-valuemax="' . e((string) $o['max'])
         . '" aria-valuetext="' . e($vt) . '"' . ($o['label'] !== '' ? ' aria-label="' . e((string) $o['label']) . '"' : '') . '>'
-        . '<svg class="mf-ring__svg" viewBox="0 0 100 100" fill="none" aria-hidden="true"><circle class="mf-ring__track" cx="50" cy="50" r="45"/><circle class="mf-ring__arc" cx="50" cy="50" r="45"/></svg>'
+        . '<svg class="mf-ring__svg" viewBox="0 0 100 100" fill="none" aria-hidden="true"><circle class="mf-ring__track" cx="50" cy="50" r="45" stroke="currentColor" stroke-opacity=".12" stroke-width="10"/><circle class="mf-ring__arc" cx="50" cy="50" r="45" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-dasharray="' . round($m['visual'] / 100 * 282.743, 3) . ' 282.743" transform="rotate(-90 50 50)"/></svg>'   // presentation attributes = a complete static ring even where ring.css is not loaded (previews, print, mail); the stylesheet takes over where it is
         . '<span class="mf-ring__v"><span class="mf-ring__n">' . e($txt) . '</span>' . ($o['sub'] !== '' ? '<small class="mf-ring__s">' . e((string) $o['sub']) . '</small>' : '') . '</span></div>';
 }
 /** A ring with a title and a line of detail beside it. */
@@ -44,3 +44,29 @@ function ring_card(float $value, string $title, string $detail = '', array $o = 
 }
 /** Percent of $part in $whole (0 when there is no whole). */
 function ring_pct(float|int $part, float|int $whole): float { return $whole > 0 ? $part / $whole * 100 : 0.0; }
+
+// ============================ usage meters (Plans, Plugins, AI header) ============================
+/** What this person has used: [title, detail, percent|null, ring options]. AI budget (month), voice limits (today) and wallet credit left. */
+function usage_meters(array $u): array {
+    $uid = (int) $u['id']; $out = []; $exempt = is_exempt_user($u);
+    if (site_setting('ai_enabled', '0') === '1' || $exempt) {
+        $bu = ai_budget($uid); $sp = ai_month_spend($uid);
+        if ($bu > 0 && !$exempt) { $out[] = ['AI budget this month', micro_to_inr($sp) . ' of ' . micro_to_inr($bu), ring_pct($sp, $bu), ['limit' => true, 'label' => 'AI budget used this month', 'sub' => 'used']]; }
+        elseif ($sp > 0) { $out[] = ['AI usage this month', micro_to_inr($sp) . ($exempt ? '' : ', no limit set'), null, []]; }
+    }
+    $c = voice_cfg();
+    if ($c['enabled'] && voice_el_ready($c) && !$exempt && feature_on($u, 'voice')) {
+        $d = voice_usage_today($uid);
+        if ($c['daily_chars'] > 0) { $out[] = ['Spoken replies today', number_format($d['chars']) . ' of ' . number_format($c['daily_chars']) . ' characters', ring_pct($d['chars'], $c['daily_chars']), ['limit' => true, 'label' => 'Voice characters used today', 'sub' => 'used']]; }
+        if ($c['daily_stt_sec'] > 0) { $out[] = ['Voice typing today', round($d['seconds'] / 60, 1) . ' of ' . round($c['daily_stt_sec'] / 60, 1) . ' minutes', ring_pct($d['seconds'], $c['daily_stt_sec']), ['limit' => true, 'label' => 'Voice typing used today', 'sub' => 'used']]; }
+    }
+    $in = (int) val("SELECT COALESCE(SUM(amount_micro),0) FROM {wallet_ledger} WHERE user_id=? AND kind='topup' AND amount_micro>0", [$uid]); $bal = wallet_balance($uid);
+    if ($in > 0) { $left = min(100.0, ring_pct(max(0, $bal), $in)); $out[] = ['Wallet credit left', micro_to_inr($bal) . ' left, ' . micro_to_inr($in) . ' added in all', $left, ['label' => 'Wallet credit left: ' . micro_to_inr($bal), 'sub' => 'left', 'tone' => $bal <= 0 ? 'bad' : ($left < 15 ? 'warn' : 'ok')]]; }
+    return $out;
+}
+function usage_meters_html(array $u, string $title = 'Your usage'): string {
+    $m = usage_meters($u); if (!$m) { return ''; }
+    $o = '<section class="card p-5" aria-label="' . e($title) . '"><h2 class="text-lg font-semibold tracking-tight">' . e($title) . '</h2><div class="ring-list mt-4">';
+    foreach ($m as [$t, $detail, $pct, $ro]) { $o .= $pct === null ? '<div class="ring-stack"><b class="text-sm font-semibold">' . e($t) . '</b><span class="num text-sm text-mute">' . e($detail) . '</span></div>' : '<div class="ring-stack">' . ring((float) $pct, $ro + ['size' => 'md']) . '<div><b class="block text-sm font-semibold">' . e($t) . '</b><span class="num block text-xs text-mute">' . e($detail) . '</span></div></div>'; }
+    return $o . '</div></section>';
+}

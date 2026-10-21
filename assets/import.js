@@ -34,6 +34,7 @@
       if (btn && btn.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
       var file = f && f.files && f.files[0], text = ta ? ta.value : '', hasText = isJson && text.trim() !== '';
       if ((!file && !hasText) || !w.fetch || !w.MfncUpfb || !prog) { busy(true); return; }   // nothing to send, or no JavaScript help: the plain form post (and its server-side message) is used
+      var upRing = null; function ringTo(p) { if (!w.mfRing || !prog) return; if (!upRing) { var h = d.createElement('div'); h.className = 'imp-upring'; prog.insertBefore(h, prog.firstChild); upRing = w.mfRing(h, { value: 0, size: 48, label: 'Upload progress' }); } if (upRing) upRing.update({ value: Math.max(0, Math.min(1, p)) * 100 }); }   // the fallback upload shows its progress as a ring
       e.preventDefault(); busy(true); show(''); var add = stepList(prog), tried = [], tok = csrf ? csrf.value : '', label = hasText ? 'your text' : file.name;
       var done = function (url) { w.location.href = url; }, failMsg = function (m) { show(m); busy(false); };
       var jsonUrl = (d.querySelector('[data-imp-jsonlink]') || {}).href || '#json', endpoint = form.getAttribute('data-b64');
@@ -47,7 +48,7 @@
       function fallback() {
         var s2 = add('Sending it as plain text instead…', 'run');
         return payload().then(function (bytes) {
-          return w.MfncUpfb.sendBytes(bytes, { endpoint: endpoint, csrf: tok, kind: isJson ? 'json' : 'statement', name: hasText ? 'pasted JSON' : file.name, onProgress: function (p) { s2('Sending it as plain text… ' + Math.round(p * 100) + '%', 'run'); }, onStep: function (t) { s2(t, 'run'); } });
+          return w.MfncUpfb.sendBytes(bytes, { endpoint: endpoint, csrf: tok, kind: isJson ? 'json' : 'statement', name: hasText ? 'pasted JSON' : file.name, onProgress: function (p) { ringTo(p); s2('Sending it as plain text… ' + Math.round(p * 100) + '%', 'run'); }, onStep: function (t) { s2(t, 'run'); } });
         }).then(function (j) { s2('Sent as text.', 'ok'); done(j.redirect); }, function (er) {
           if (er && er.server) { s2('Sent as text, but it was refused.', 'bad'); failMsg(er.message); return; }
           s2('The text upload was blocked too.', 'bad'); tried.push('the same content as plain text'); return isJson ? blocked() : clientParse();

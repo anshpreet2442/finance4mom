@@ -12,6 +12,11 @@ function ai_gate_notice(array $u): string {
     return '<div class="card mx-auto max-w-xl p-8 text-center"><div class="mx-auto mb-4 grid size-14 place-items-center rounded-3xl bg-soft"><span class="pills-mark" data-pills data-size="40"></span></div><h2 class="text-xl font-semibold">AI advisor is not available</h2><p class="mt-2 text-sm text-mute">' . e($why) . '</p>' . $link . '</div>';
 }
 
+/** Monthly AI budget as a small ring in the chat header (only when the person has a budget to run out of). */
+function ai_budget_ring(array $u): string {
+    $uid = (int) $u['id']; $bu = ai_budget($uid); if ($bu <= 0 || is_exempt_user($u)) { return ''; } $sp = ai_month_spend($uid); $pct = ring_pct($sp, $bu);
+    return '<span class="ai-budget" title="' . e('AI budget this month: ' . micro_to_inr($sp) . ' of ' . micro_to_inr($bu)) . '">' . ring($pct, ['limit' => true, 'size' => 'xs', 'label' => 'AI budget used this month: ' . micro_to_inr($sp) . ' of ' . micro_to_inr($bu)]) . '</span>';
+}
 function page_ai(): void {
     $u = require_login(); $s = snap(); $uid = (int) $u['id']; $profile = ai_profile($uid);
     layout_start('AI advisor', 'ai', $s);
@@ -33,7 +38,7 @@ function page_ai(): void {
     echo '<link rel="stylesheet" href="' . e(asset('ai.css')) . '">';
     echo '<section class="card ai-chat ai2" data-ai aria-label="Chat with your advisor"><header class="ai-chat__head"><span class="ai-logo" aria-hidden="true"><span class="pills-mark" data-pills data-size="32"></span></span><div class="ai-chat__who"><p class="ai-chat__name" data-ai-name>' . e($profile['agent_name'] ?: 'Your advisor') . '</p><p class="ai-chat__sub" data-ai-sub>'
         . ($profile['stage'] === 'interview' ? 'Getting to know you' : ($profile['stage'] === 'naming' ? 'Waiting for a name' : 'Ready. Ask anything about your money.')) . '</p></div>'
-        . '<div class="ai-chat__tools"><span data-ai-speak-slot></span><a class="ai-iconbtn" href="' . e(url('/ai/actions')) . '" aria-label="Actions and undo" title="Actions and undo">' . icon('history', 'size-5') . '</a><a class="ai-iconbtn" href="' . e(url('/ai/settings')) . '" aria-label="Advisor settings" title="Advisor settings">' . icon('sliders-horizontal', 'size-5') . '</a></div></header>'
+        . '<div class="ai-chat__tools">' . ai_budget_ring($u) . '<span data-ai-speak-slot></span><a class="ai-iconbtn" href="' . e(url('/ai/actions')) . '" aria-label="Actions and undo" title="Actions and undo">' . icon('history', 'size-5') . '</a><a class="ai-iconbtn" href="' . e(url('/ai/settings')) . '" aria-label="Advisor settings" title="Advisor settings">' . icon('sliders-horizontal', 'size-5') . '</a></div></header>'
         . '<div class="ai-stage"><div class="ai-log" data-ai-log role="log" aria-live="polite" aria-relevant="additions"></div><button type="button" class="ai-down" data-ai-down aria-label="Jump to the latest message">' . icon('arrow-down', 'size-5') . '</button></div>'
         . '<div class="ai-suggest" data-ai-suggest></div>'
         . '<div class="ai-composer"><div data-ai-composer></div><p class="ai-foot">General information, not regulated advice. Confirm tax and legal matters with a practising chartered accountant.</p></div></section>';

@@ -63,6 +63,7 @@ function page_plugins(): void {
     page_header('Plugins', 'Add features to your app. Pay from your wallet and they switch on straight away.', '<a class="btn btn-sm" href="' . e(url('/plans')) . '">' . icon('credit-card', 'size-4') . 'Plans &amp; wallet</a>');
     echo '<section id="wallet" class="card mb-5 flex flex-wrap items-center justify-between gap-4 p-5"><div class="flex items-center gap-4"><span class="shop-ic shop-ic--lg">' . icon('wallet', 'size-6') . '</span><div><p class="text-xs font-medium uppercase tracking-wide text-mute">Wallet balance</p><p class="num text-3xl font-semibold" data-wallet-balance>' . e(micro_to_inr($bal)) . '</p></div></div>'
         . '<button type="button" class="btn btn-dark" data-open="#topup">' . icon('circle-plus', 'size-4') . 'Top up</button></section>';
+    if ($um = usage_meters_html($u)) { echo '<div class="mb-5">' . $um . '</div>'; }
     echo '<dialog id="topup" class="modal" aria-labelledby="topup-t"><div class="modal-body"><div class="mb-4 flex items-start justify-between gap-4"><h2 id="topup-t" class="text-xl font-semibold tracking-tight">Top up your wallet</h2><button type="button" class="btn btn-ghost btn-sm -mr-2" data-close aria-label="Close">' . icon('x', 'size-4') . '</button></div>'
         . '<p class="mb-4 text-sm text-mute">You pay on the secure gateway page; the credit appears as soon as the payment is confirmed.</p>' . shop_topup_form('wallet-topup', [], 50000, 'Continue to payment') . '</div></dialog>';
     $items = shop_catalog($u); $nonce = bin2hex(random_bytes(8));

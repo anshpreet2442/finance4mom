@@ -109,7 +109,7 @@ function import_page_preview(array $u, array $s, string $token): void {
     } else {
         $bad = array_filter($rec, fn($l) => !$l['ok']);
         $money = fn($l, $v) => $l['kind'] === 'money' ? fmt($v) : (string) $v;
-        echo '<section class="card imp-card imp-rec ' . ($bad ? 'is-warn' : 'is-ok') . '" id="reconcile"><h2 class="imp-h">' . icon($bad ? 'triangle-alert' : 'circle-check', 'size-5') . ($bad ? ' Some totals do not match the statement' : ' Matches the statement\'s own totals') . '</h2>'
+        $okN = count($rec) - count($bad); echo '<section class="card imp-card imp-rec ' . ($bad ? 'is-warn' : 'is-ok') . '" id="reconcile"><div class="imp-recring">' . ring(ring_pct($okN, count($rec)), ['size' => 'md', 'tone' => $bad ? 'warn' : 'done', 'label' => $okN . ' of ' . count($rec) . ' totals match the statement', 'sub' => 'match']) . '</div><h2 class="imp-h">' . icon($bad ? 'triangle-alert' : 'circle-check', 'size-5') . ($bad ? ' Some totals do not match the statement' : ' Matches the statement\'s own totals') . '</h2>'
             . '<p class="imp-p">' . ($bad ? 'The rows we read differ from the Summary sheet. The Summary leaves out payments between your own accounts, so differences can be harmless, but please look before importing.' : 'Every count and amount we read equals the Summary sheet, in total and for each account.') . '</p>'
             . '<div class="imp-tablewrap"><table class="imp-table"><thead><tr><th>Item</th><th class="r">Statement says</th><th class="r">We read</th><th class="r">Result</th></tr></thead><tbody>';
         foreach ($rec as $l) {
