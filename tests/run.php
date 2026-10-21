@@ -423,5 +423,10 @@ check('an avatar is always produced (fallback when DiceBear is unreachable)', st
 section('system prompt');
 $sp = ai_system_prompt($aiU, ai_profile($AI)); check('variables are filled', str_contains($sp, 'bRanib') && str_contains($sp, 'Asha') && !str_contains($sp, '{agent_name}') && str_contains($sp, 'Household')); check('prompt forbids tax evasion', str_contains($sp, 'evade tax'));
 $cfgSet(['ai_system_prompt' => 'Custom for {user_name}']); eq(ai_system_prompt($aiU, ai_profile($AI)), 'Custom for Asha', 'admin prompt replaces the default'); $cfgSet(['ai_system_prompt' => '']);
+
+section('input hygiene (tester findings)');
+$_POST = ['name' => "Evil\r\nBcc: x@y.z\tname"]; eq(in_line('name', 80), 'Evil Bcc: x@y.z name', 'single-line fields lose line breaks and tabs'); $_POST = ['notes' => "line1\r\nline2\x07"]; eq(in_str('notes', 80), "line1\nline2", 'multi-line fields keep line breaks but lose control characters'); $_POST = [];
+eq(unknown_params('Hi {name} {amout} {nope}'), ['amout', 'nope'], 'typos in template parameters are found');
+check('autolink leaves trailing punctuation outside the link', str_contains(email_html('see https://x.test/a).'), 'href="https://x.test/a">https://x.test/a</a>).'));
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);

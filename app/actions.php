@@ -10,7 +10,7 @@ const PUBLIC_ACTIONS = ['login', 'register'];
 
 // ---------------- auth ----------------
 function do_login(?array $u): ?string {
-    $email = in_str('email', 190, true, 'Email'); $pw = in_str('password', 200, true, 'Password');
+    $email = in_line('email', 190, true, 'Email'); $pw = in_str('password', 200, true, 'Password');
     $id = attempt_login($email, $pw);
     login_user($id);
     $GLOBALS['__redirect'] = url('/');
@@ -19,7 +19,7 @@ function do_login(?array $u): ?string {
 function do_register(?array $u): ?string {
     $first = (int) val('SELECT COUNT(*) FROM {users}') === 0;
     if (!$first && site_setting('registration_open', '1') !== '1') { throw new UserError('Registration is currently closed. Ask the administrator for an account.'); }
-    $name = in_str('name', 80, true, 'Name'); $email = strtolower(in_str('email', 190, true, 'Email'));
+    $name = in_line('name', 80, true, 'Name'); $email = strtolower(in_line('email', 190, true, 'Email'));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { throw new UserError('Enter a valid email address.'); }
     $pw = in_str('password', 200, true, 'Password');
     if (strlen($pw) < 10) { throw new UserError('Use at least 10 characters for your password.'); }
@@ -42,7 +42,7 @@ function do_transaction_save(array $u): string {
     $status = in_bool('planned') && in_array($type, ['income', 'expense'], true) ? 'planned' : 'completed';
     $i = ['type' => $type, 'status' => $status, 'amount' => $amount, 'date' => in_date('date'), 'account_id' => in_id('account_id', 'account'),
         'to_account_id' => $type === 'transfer' ? in_id('to_account_id', 'destination account') : null,
-        'category_id' => in_opt_id('category_id'), 'description' => in_str('description', 200, false), 'payment_method' => in_opt('payment_method', 40),
+        'category_id' => in_opt_id('category_id'), 'description' => in_line('description', 200, false), 'payment_method' => in_opt('payment_method', 40),
         'notes' => in_opt('notes', 500), 'refund_of' => $type === 'refund' ? in_opt_id('refund_of') : null, 'fund_goal_id' => $type === 'expense' ? in_opt_id('fund_goal_id') : null];
     if ($id) { update_transaction((int) $u['id'], $id, $i); return 'Transaction updated.'; }
     create_transaction((int) $u['id'], $i);
@@ -101,7 +101,7 @@ function last_part(string $s): string { $p = explode('›', $s); return end($p);
 
 // ---------------- accounts / categories / budgets / templates ----------------
 function do_account_save(array $u): string {
-    save_account((int) $u['id'], in_opt_id('id'), in_str('name', 60), in_enum('type', ['bank', 'cash', 'wallet', 'card']), in_money('opening_balance', false, true, true, 'Opening balance'), in_date('opening_date', 'Opening date'), in_enum('purpose', array_keys(ACCOUNT_PURPOSES), 'spending'), in_opt('label', 40));
+    save_account((int) $u['id'], in_opt_id('id'), in_line('name', 60), in_enum('type', ['bank', 'cash', 'wallet', 'card']), in_money('opening_balance', false, true, true, 'Opening balance'), in_date('opening_date', 'Opening date'), in_enum('purpose', array_keys(ACCOUNT_PURPOSES), 'spending'), in_opt('label', 40));
     return 'Account saved.';
 }
 function do_account_balance(array $u): string {
@@ -110,11 +110,11 @@ function do_account_balance(array $u): string {
 }
 function do_account_delete(array $u): string { return delete_account((int) $u['id'], in_id('id')) === 'archived' ? 'Account has transactions, so it was archived instead.' : 'Account deleted.'; }
 function do_account_restore(array $u): string { owned('accounts', in_id('id'), (int) $u['id']); run('UPDATE {accounts} SET archived=0 WHERE id=? AND user_id=?', [in_id('id'), $u['id']]); return 'Account restored.'; }
-function do_category_save(array $u): string { save_category((int) $u['id'], in_opt_id('id'), in_str('name', 60), in_enum('grp', ['fixed', 'household', 'personal', 'occasional', 'custom', 'income']), in_opt_id('parent_id')); return 'Category saved.'; }
+function do_category_save(array $u): string { save_category((int) $u['id'], in_opt_id('id'), in_line('name', 60), in_enum('grp', ['fixed', 'household', 'personal', 'occasional', 'custom', 'income']), in_opt_id('parent_id')); return 'Category saved.'; }
 function do_category_delete(array $u): string { delete_category((int) $u['id'], in_id('id')); return 'Category deleted. Its transactions are now uncategorised.'; }
 function do_budget_set(array $u): string { set_budget((int) $u['id'], in_id('category_id'), in_money('amount', false, false, true, 'Budget')); return 'Budget saved.'; }
 function do_template_save(array $u): string {
-    save_template((int) $u['id'], in_opt_id('id'), ['type' => in_enum('type', ['income', 'expense']), 'description' => in_str('description', 100, true, 'Name'), 'amount' => in_money('amount'), 'category_id' => in_opt_id('category_id'),
+    save_template((int) $u['id'], in_opt_id('id'), ['type' => in_enum('type', ['income', 'expense']), 'description' => in_line('description', 100, true, 'Name'), 'amount' => in_money('amount'), 'category_id' => in_opt_id('category_id'),
         'account_id' => in_id('account_id', 'account'), 'frequency' => in_enum('frequency', array_keys(FREQ_MONTHS)), 'next_date' => in_date('next_date', 'Next date'), 'active' => in_bool('active')]);
     return 'Recurring item saved.';
 }
@@ -122,7 +122,7 @@ function do_template_delete(array $u): string { delete_template((int) $u['id'], 
 
 // ---------------- savings ----------------
 function do_goal_save(array $u): string {
-    save_goal((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['long-term', 'personal']), 'name' => in_str('name', 80), 'target_amount' => in_money('target_amount', false, false, true, 'Target'), 'target_date' => in_opt_date('target_date'),
+    save_goal((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['long-term', 'personal']), 'name' => in_line('name', 80), 'target_amount' => in_money('target_amount', false, false, true, 'Target'), 'target_date' => in_opt_date('target_date'),
         'priority' => in_enum('priority', ['high', 'medium', 'low'], 'medium'), 'monthly_target' => in_money('monthly_target', false, false, true, 'Monthly contribution'), 'monthly_limit' => in_money('monthly_limit', false, false, true, 'Spending limit'), 'notes' => in_opt('notes')]);
     return 'Goal saved.';
 }
@@ -134,7 +134,7 @@ function do_contribute(array $u): string {
 }
 function do_contribution_delete(array $u): string { delete_contribution((int) $u['id'], in_id('id')); return 'Entry removed.'; }
 function do_purchase_save(array $u): string {
-    save_purchase((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['house', 'big', 'occasional']), 'name' => in_str('name', 100), 'description' => in_opt('description', 300), 'group_label' => in_opt('group_label', 60),
+    save_purchase((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['house', 'big', 'occasional']), 'name' => in_line('name', 100), 'description' => in_opt('description', 300), 'group_label' => in_opt('group_label', 60),
         'estimated' => in_money('estimated', true, false, false, 'Estimated cost'), 'priority' => in_enum('priority', ['high', 'medium', 'low'], 'medium'), 'target_date' => in_opt_date('target_date'),
         'status' => in_enum('status', array_keys(PURCHASE_STATUS), 'planning'), 'monthly_setaside' => in_money('monthly_setaside', false, false, true, 'Monthly set-aside'), 'account_id' => in_opt_id('account_id')]);
     return 'Saved.';
@@ -144,7 +144,7 @@ function do_purchase_buy(array $u): string { mark_purchased((int) $u['id'], in_i
 
 // ---------------- bills ----------------
 function do_bill_save(array $u): string {
-    save_bill((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['bill', 'yearly']), 'name' => in_str('name', 100), 'amount' => in_money('amount'), 'category_id' => in_opt_id('category_id'), 'account_id' => in_opt_id('account_id'),
+    save_bill((int) $u['id'], in_opt_id('id'), ['kind' => in_enum('kind', ['bill', 'yearly']), 'name' => in_line('name', 100), 'amount' => in_money('amount'), 'category_id' => in_opt_id('category_id'), 'account_id' => in_opt_id('account_id'),
         'frequency' => in_enum('frequency', array_keys(FREQ_MONTHS)), 'due_date' => in_date('due_date', 'Due date'), 'reminder_days' => in_int('reminder_days', 0, 90, 7), 'active' => in_bool('active'), 'notes' => in_opt('notes')], today());
     return 'Saved.';
 }
@@ -187,7 +187,7 @@ function do_prefs_save(array $u): string {
     run('UPDATE {preferences} SET currency=?,locale=?,theme=?,reminder_days=?,big_purchase_threshold=? WHERE user_id=?', [$cur, $loc, in_enum('theme', ['system', 'light', 'dark']), in_int('reminder_days', 0, 60, 7), in_money('big_purchase_threshold', false, false, true, 'Big-purchase threshold'), $u['id']]);
     return 'Preferences saved.';
 }
-function do_profile_save(array $u): string { run('UPDATE {users} SET name=? WHERE id=?', [in_str('name', 80), $u['id']]); return 'Profile saved.'; }
+function do_profile_save(array $u): string { run('UPDATE {users} SET name=? WHERE id=?', [in_line('name', 80), $u['id']]); return 'Profile saved.'; }
 function do_password_change(array $u): string {
     $row = one('SELECT password_hash FROM {users} WHERE id=?', [$u['id']]);
     if (!password_verify(in_str('current', 200, true, 'Current password'), $row['password_hash'])) { throw new UserError('Current password is incorrect.'); }
@@ -241,10 +241,10 @@ function do_admin_user_delete(array $u): string {
     return $t['email'] . ' and all of their data were deleted.';
 }
 function do_admin_user_create(array $u): string {
-    $email = strtolower(in_str('email', 190, true, 'Email')); if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { throw new UserError('Enter a valid email address.'); }
+    $email = strtolower(in_line('email', 190, true, 'Email')); if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { throw new UserError('Enter a valid email address.'); }
     if (val('SELECT id FROM {users} WHERE email=?', [$email])) { throw new UserError('An account with this email already exists.'); }
     $pw = in_str('password', 200, true, 'Password'); if (strlen($pw) < 10 || strlen($pw) > 72) { throw new UserError('Use between 10 and 72 characters.'); }
-    create_user($email, in_str('name', 80), $pw, in_enum('role', ['user', 'admin'], 'user')); audit('admin.user.create', $email);
+    create_user($email, in_line('name', 80), $pw, in_enum('role', ['user', 'admin'], 'user')); audit('admin.user.create', $email);
     return "Account created for $email.";
 }
 function do_admin_settings(array $u): string {
@@ -263,11 +263,11 @@ function do_dues_pay(array $u): ?string {
     $GLOBALS['__redirect'] = $url; return null;
 }
 function do_admin_charge_create(array $u): string {
-    admin_create_charge((int) $u['id'], in_id('user_id', 'person'), in_str('title', 160, true, 'What it is for'), in_opt('description', 300), in_money('amount'), in_date('due_date', 'Due date')); return 'Charge posted. They have been notified.';
+    admin_create_charge((int) $u['id'], in_id('user_id', 'person'), in_line('title', 160, true, 'What it is for'), in_opt('description', 300), in_money('amount'), in_date('due_date', 'Due date')); return 'Charge posted. They have been notified.';
 }
 function in_month(string $k, bool $required = true): ?string { $v = in_str($k, 7, $required, ucfirst(str_replace('_', ' ', $k))); if ($v === '') { return null; } if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $v)) { throw new UserError('Use the format YYYY-MM for months, for example 2026-11.'); } return $v; }
 function do_admin_plan_save(array $u): string {
-    admin_save_plan((int) $u['id'], in_opt_id('id'), in_id('user_id', 'person'), in_str('title', 120, true, 'What it is for'), in_opt('description', 300), in_money('amount'), in_int('day_of_month', 1, 28, 5), (string) in_month('start_month'), in_month('end_month', false), in_bool('active'));
+    admin_save_plan((int) $u['id'], in_opt_id('id'), in_id('user_id', 'person'), in_line('title', 120, true, 'What it is for'), in_opt('description', 300), in_money('amount'), in_int('day_of_month', 1, 28, 5), (string) in_month('start_month'), in_month('end_month', false), in_bool('active'));
     return 'Monthly charge saved.';
 }
 function do_admin_plan_toggle(array $u): string { $id = in_id('id'); if (!one('SELECT id FROM {charge_plans} WHERE id=?', [$id])) { throw new UserError('Monthly charge not found.'); } run('UPDATE {charge_plans} SET active=? WHERE id=?', [in_bool('active') ? 1 : 0, $id]); audit('billing.plan.toggle', "plan#$id"); return 'Monthly charge updated.'; }
@@ -289,7 +289,7 @@ function do_admin_billing_test(array $u): string {
         $msg .= $sum === 'ok' ? ' Diagnosis: all checks passed.' : ' Diagnosis: ' . $sum . '. ' . implode(' ', array_map(fn($c) => ($c['title'] ?? '') . ($c['fix'] ?? '' ? ' Fix: ' . $c['fix'] : ''), array_slice($bad, 0, 2))); } catch (PayuError) { }
     return $msg;
 }
-function do_admin_user_billing(array $u): string { $id = in_id('id'); run('UPDATE {users} SET billing_enforced=? WHERE id=?', [in_bool('enforced') ? 1 : 0, $id]); audit('billing.exempt', "user#$id", in_bool('enforced') ? 'enforced' : 'exempt'); return in_bool('enforced') ? 'Dues are enforced for this person again.' : 'This person is now exempt from reminders, late fees and restrictions.'; }
+function do_admin_user_billing(array $u): string { $id = in_id('id'); if (!one('SELECT id FROM {users} WHERE id=?', [$id])) { throw new UserError('User not found.'); } run('UPDATE {users} SET billing_enforced=? WHERE id=?', [in_bool('enforced') ? 1 : 0, $id]); audit('billing.exempt', "user#$id", in_bool('enforced') ? 'enforced' : 'exempt'); return in_bool('enforced') ? 'Dues are enforced for this person again.' : 'This person is now exempt from reminders, late fees and restrictions.'; }
 function do_theme_quick(array $u): ?string { run('UPDATE {preferences} SET theme=? WHERE user_id=?', [in_enum('theme', ['light', 'dark', 'system']), $u['id']]); return null; }
 
 
@@ -316,7 +316,7 @@ function do_intro_done(array $u): ?string { start_session(); unset($_SESSION['in
 function do_plan_future(array $u): string {
     $k = in_enum('kind', ['trip', 'occasion', 'big', 'house']); $map = ['trip' => ['occasional', 'Travel'], 'occasion' => ['occasional', 'Occasion'], 'big' => ['big', null], 'house' => ['house', 'Other']];
     $date = in_date('target_date', 'Needed by'); if ($date < today()) { throw new UserError('Pick a date in the future.'); }
-    save_purchase((int) $u['id'], null, ['kind' => $map[$k][0], 'name' => in_str('name', 100, true, 'What it is'), 'description' => null, 'group_label' => $map[$k][1], 'estimated' => in_money('estimated', true, false, false, 'Estimated cost'), 'priority' => in_enum('priority', ['high', 'medium', 'low'], 'medium'),
+    save_purchase((int) $u['id'], null, ['kind' => $map[$k][0], 'name' => in_line('name', 100, true, 'What it is'), 'description' => null, 'group_label' => $map[$k][1], 'estimated' => in_money('estimated', true, false, false, 'Estimated cost'), 'priority' => in_enum('priority', ['high', 'medium', 'low'], 'medium'),
         'target_date' => $date, 'status' => 'saving', 'monthly_setaside' => 0, 'account_id' => in_opt_id('account_id')]);
     return 'Added to your plans. See how much to save each month on the Accounts page.';
 }

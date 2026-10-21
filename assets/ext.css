@@ -128,3 +128,6 @@
 @media (max-width: 1023px) { .ai-chat { height: calc(100dvh - 15rem); min-height: 420px; border-radius: 1.5rem; } .ai-msg--user .ai-msg__b { max-width: 88%; } }
 @media (prefers-reduced-motion: reduce) { .ai-dots { animation: none; } .ai-log { scroll-behavior: auto; } }
 @media (min-width: 1024px) { body.has-dock .ai-chat { height: min(calc(100dvh - 22rem), 780px); } }
+
+/* never scroll the page sideways (clip, unlike hidden, keeps sticky headers working) */
+html, body { overflow-x: clip; }

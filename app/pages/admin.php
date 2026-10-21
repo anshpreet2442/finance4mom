@@ -149,11 +149,11 @@ function page_admin_billing(): void {
     card_close(); echo '</div>';
     // charges
     $actionsFor = function (array $c) { $id = (int) $c['id']; if ($c['status'] !== 'pending') { return ''; } $o = '';
-        if ($c['late_fee'] > 0 && !$c['late_fee_waived']) { $o .= confirm_btn('Waive fee', 'admin-charge-action', ['id' => $id, 'action' => 'waive_fee'], 'Waive the late fee?', 'The late fee of ' . fmt_inr((int) $c['late_fee']) . ' will no longer be payable.', 'Waive fee', 'btn btn-sm'); }
+        if ($c['late_fee'] > 0 && !$c['late_fee_waived']) { $o .= confirm_btn('Waive late fee', 'admin-charge-action', ['id' => $id, 'action' => 'waive_fee'], 'Waive the late fee?', 'The late fee of ' . fmt_inr((int) $c['late_fee']) . ' will no longer be payable.', 'Waive late fee', 'btn btn-sm'); }
         return $o . confirm_btn('Mark paid', 'admin-charge-action', ['id' => $id, 'action' => 'paid'], 'Mark as paid?', 'Use this when the money was handed over in person. It is recorded as received outside the app.', 'Mark paid', 'btn btn-sm')
-            . confirm_btn('Waive', 'admin-charge-action', ['id' => $id, 'action' => 'waive'], 'Waive this charge?', 'The charge is forgiven and no longer counts against ' . $c['uname'] . '.', 'Waive', 'btn btn-ghost btn-sm')
+            . confirm_btn('Waive charge', 'admin-charge-action', ['id' => $id, 'action' => 'waive'], 'Waive this charge?', 'The charge is forgiven and no longer counts against ' . $c['uname'] . '.', 'Waive', 'btn btn-ghost btn-sm')
             . confirm_btn('Cancel', 'admin-charge-action', ['id' => $id, 'action' => 'cancel'], 'Cancel this charge?', 'Use this if it was posted by mistake.', 'Cancel charge', 'btn btn-ghost btn-sm text-neg'); };
-    echo '<div class="mt-5">'; card_open('Charges', '', jelly(array_combine(['all', 'pending', 'paid', 'waived', 'cancelled'], array_map(fn($k, $l) => ['label' => $l, 'href' => url('/admin/billing', $k ? ['status' => $k] : [])], ['', 'pending', 'paid', 'waived', 'cancelled'], ['All', 'Unpaid', 'Paid', 'Waived', 'Cancelled'])), $status === '' ? 'all' : $status, ['size' => 'sm', 'label' => 'Filter charges']));
+    echo '<div class="mt-5">'; card_open('Charges', '', jelly(array_combine(['all', 'pending', 'paid', 'waived', 'cancelled'], array_map(fn($k, $l) => ['label' => $l, 'href' => url('/admin/billing', $k ? ['status' => $k] : [])], ['', 'pending', 'paid', 'waived', 'cancelled'], ['All', 'Unpaid', 'Paid', 'Waived', 'Cancelled'])), $status === '' ? 'all' : $status, ['size' => 'sm', 'class' => 'max-w-full overflow-x-auto', 'label' => 'Filter charges']));
     if (!$charges) { echo '<p class="text-sm text-mute">No charges.</p>'; }
     else {
         echo '<ul class="divide-y divide-line">';

@@ -15,7 +15,7 @@ function receipt_fields(): array {
 }
 function posted_email_choice(): ?bool { return !empty($_POST['email_choice']) ? post_bool('email_receipt') : null; }
 function do_alerts_save(array $u): string {
-    $phone = in_str('phone', 25, false, 'Phone');
+    $phone = in_line('phone', 25, false, 'Phone');
     if ($phone !== '' && !normalize_phone($phone, sms_cfg()['cc'])) { throw new UserError('That phone number does not look right. Use the international format, e.g. +919876543210.'); }
     run('UPDATE {preferences} SET phone=?, email_alerts=?, sms_alerts=? WHERE user_id=?', [$phone === '' ? null : normalize_phone($phone, sms_cfg()['cc']), post_bool('email_alerts') ? 1 : 0, post_bool('sms_alerts') ? 1 : 0, $u['id']]);
     return 'Alert settings saved.';
@@ -47,6 +47,8 @@ function do_admin_email_templates(array $u): string {
         $ev = in_enum('preview', array_keys(EMAIL_EVENTS)); $v = template_vars($u, ['title' => 'Phone bill', 'amount' => fmt_inr(125000), 'due_date' => date_label(today()), 'account' => ' from HDFC Savings']);
         $_SESSION['email_preview'] = [render_template((string) ($subs[$ev] ?? ''), $v), render_template((string) ($bodies[$ev] ?? ''), $v)]; return 'Preview below (not saved yet).';
     }
+    $bad = []; foreach (array_keys(EMAIL_EVENTS) as $ev) { foreach ([$subs[$ev] ?? '', $bodies[$ev] ?? ''] as $txt) { foreach (unknown_params((string) $txt) as $k) { $bad[$k] = 1; } } }
+    if ($bad) { throw new UserError('Unknown parameter' . (count($bad) > 1 ? 's' : '') . ' in the templates: {' . implode('}, {', array_keys($bad)) . '}. Available: {' . implode('}, {', array_keys(TEMPLATE_VARS)) . '}.'); }
     foreach (array_keys(EMAIL_EVENTS) as $ev) { if ($ev === 'test' || !isset($subs[$ev], $bodies[$ev])) { continue; }
         $s = mb_substr(trim((string) $subs[$ev]), 0, 200); $b = mb_substr(trim((string) $bodies[$ev]), 0, 3000); $d = default_email_template($ev);
         set_setting("mail_tpl_{$ev}_subject", $s === $d[0] ? '' : $s); set_setting("mail_tpl_{$ev}_body", str_replace("\r\n", "\n", $b) === $d[1] ? '' : $b); }
@@ -65,11 +67,11 @@ function do_admin_sms_settings(array $u): string {
 }
 function do_admin_sms_template(array $u): string {
     if (!empty($_POST['reset'])) { set_setting('sms_template', ''); return 'Template reset to the default.'; }
-    $t = trim(in_str('template', 400, true, 'Template')); set_setting('sms_template', $t === default_sms_template() ? '' : $t); audit('admin.sms.template', 'site'); return 'SMS template saved.';
+    $t = trim(in_str('template', 400, true, 'Template')); if ($bad = unknown_params($t)) { throw new UserError('Unknown parameter' . (count($bad) > 1 ? 's' : '') . ': {' . implode('}, {', $bad) . '}. Available: {' . implode('}, {', array_keys(TEMPLATE_VARS)) . '}.'); } set_setting('sms_template', $t === default_sms_template() ? '' : $t); audit('admin.sms.template', 'site'); return 'SMS template saved.';
 }
 function do_admin_sms_test(array $u): string {
     $c = sms_cfg(); $v = template_vars($u, ['title' => 'Test payment', 'amount' => fmt_inr(125000), 'due_date' => date_label(day_after_n(today(), 7)), 'link' => abs_url('/dues')]);
-    [$ok, $err] = send_sms(in_str('phone', 25, true, 'Phone'), render_template($c['template'], $v), (int) $u['id'], 'test');
+    [$ok, $err] = send_sms(in_line('phone', 25, true, 'Phone'), render_template($c['template'], $v), (int) $u['id'], 'test');
     if (!$ok) { throw new UserError('The test SMS failed: ' . $err); }
     audit('admin.sms.test'); return 'Test SMS sent.';
 }
@@ -129,13 +131,13 @@ function do_admin_user_budget(array $u): string {
 function do_admin_wallet_adjust(array $u): string {
     $uid = in_id('user_id', 'person'); if (!one('SELECT id FROM {users} WHERE id=?', [$uid])) { throw new UserError('User not found.'); }
     $sign = in_enum('op', ['credit', 'debit']); $m = post_micro('amount'); if ($m <= 0) { throw new UserError('Enter an amount.'); }
-    wallet_add($uid, $sign === 'credit' ? $m : -$m, 'adjust', in_str('note', 120, false) ?: 'Admin adjustment'); audit('admin.wallet', "user#$uid", $sign . ' ' . micro_to_inr($m)); return 'Wallet updated.';
+    wallet_add($uid, $sign === 'credit' ? $m : -$m, 'adjust', in_line('note', 120, false) ?: 'Admin adjustment'); audit('admin.wallet', "user#$uid", $sign . ' ' . micro_to_inr($m)); return 'Wallet updated.';
 }
 
 // ---------------- AI advisor (person) ----------------
 function ai_require(array $u): void { if ($why = ai_not_ready_reason()) { throw new UserError($why); } $fa = feature_access($u, 'ai'); if (!$fa['ok']) { throw new UserError($fa['reason']); } }
 function do_ai_profile_save(array $u): string {
-    ai_require($u); $name = ai_clean_name(in_str('agent_name', 40, true, 'Name')); if (mb_strlen($name) < 2) { throw new UserError('A name needs at least 2 letters or digits.'); }
+    ai_require($u); $name = ai_clean_name(in_line('agent_name', 40, true, 'Name')); if (mb_strlen($name) < 2) { throw new UserError('A name needs at least 2 letters or digits.'); }
     run("UPDATE {ai_profiles} SET agent_name=?, avatar_style=?, stage=IF(stage='naming','ready',stage) WHERE user_id=?", [$name, in_enum('avatar_style', array_keys(AI_STYLES)), $u['id']]); ai_profile((int) $u['id']); return 'Saved.';
 }
 function do_ai_context_save(array $u): string { ai_profile((int) $u['id']); run('UPDATE {ai_profiles} SET context=? WHERE user_id=?', [in_str('context', 3000, false), $u['id']]); return 'What your advisor knows about you is updated.'; }

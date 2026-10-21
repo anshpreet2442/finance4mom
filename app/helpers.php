@@ -64,12 +64,14 @@ function client_ip(): string { return substr((string) ($_SERVER['REMOTE_ADDR'] ?
 // ============================ request input ============================
 function in_str(string $k, int $max = 200, bool $required = true, string $label = ''): string {
     $v = $_POST[$k] ?? '';
-    $v = is_string($v) ? trim($v) : '';
+    $v = is_string($v) ? trim((string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', '', str_replace(["\r\n", "\r"], "\n", $v))) : ''; // no control characters; line breaks only survive in multi-line fields
     $label = $label ?: ucfirst(str_replace('_', ' ', $k));
     if ($v === '' && $required) { throw new UserError("$label is required."); }
     if (mb_strlen($v) > $max) { throw new UserError("$label is too long (max $max characters)."); }
     return $v;
 }
+/** A single-line text field: line breaks and tabs become spaces (names, titles, descriptions end up in emails, SMS and headers). */
+function in_line(string $k, int $max = 200, bool $required = true, string $label = ''): string { $_POST[$k] = is_string($_POST[$k] ?? null) ? preg_replace('/\s+/u', ' ', $_POST[$k]) : ''; return in_str($k, $max, $required, $label); }
 function in_opt(string $k, int $max = 500): ?string { $v = in_str($k, $max, false); return $v === '' ? null : $v; }
 function in_id(string $k, string $label = ''): int {
     $v = $_POST[$k] ?? ''; $label = $label ?: ucfirst(str_replace('_', ' ', $k));
@@ -112,7 +114,10 @@ const LOCALES = ['en-IN' => 'English (India) · 1,25,000', 'en-US' => 'English (
 
 /** Parse "1,25,000.50" / "₹ 500" into integer minor units without floating point. null if invalid. */
 function parse_money(string $s, bool $allowNegative = false): ?int {
-    $s = trim(str_replace([',', ' ', '₹', '$', '€', '£', "\u{00A0}"], '', $s));
+    $s = trim(str_replace([' ', '₹', '$', '€', '£', "\u{00A0}"], '', $s));
+    // locales that write 1.234,50: the comma is the decimal mark (anywhere else every comma is a thousands separator)
+    if (function_exists('prefs') && in_array(prefs()['locale'] ?? '', ['de-DE', 'fr-FR'], true) && preg_match('/^-?(\d{1,3}(\.\d{3})+|\d+)(,\d{1,2})?$/', $s)) { $s = str_replace(',', '.', str_replace('.', '', $s)); }
+    else { $s = str_replace(',', '', $s); }
     $neg = false;
     if ($s !== '' && $s[0] === '-') { if (!$allowNegative) { return null; } $neg = true; $s = substr($s, 1); }
     if (!preg_match('/^\d+(\.\d{0,2})?$/', $s)) { return null; }

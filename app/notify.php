@@ -25,6 +25,8 @@ function default_sms_template(): string { return 'Hi {name}, {title} of {amount}
 function render_template(string $tpl, array $vars): string {
     return preg_replace_callback('/\{([a-z_]+)\}/', fn($m) => array_key_exists($m[1], $vars) ? (string) $vars[$m[1]] : $m[0], $tpl) ?? $tpl;
 }
+/** Parameters used in a template that the app does not know (typos), so the admin hears about them when saving. */
+function unknown_params(string $tpl, array $known = []): array { $known = $known ?: array_keys(TEMPLATE_VARS); preg_match_all('/\{([a-zA-Z_]+)\}/', $tpl, $m); return array_values(array_unique(array_diff($m[1], $known))); }
 function template_vars(array $user, array $v = []): array {
     $title = $v['title'] ?? ($v['bill'] ?? '');
     return $v + ['name' => explode(' ', trim((string) ($user['name'] ?? '')))[0] ?: 'there', 'app' => APP_NAME, 'link' => abs_url('/'), 'title' => $title, 'bill' => $title, 'amount' => '', 'date' => today(), 'due_date' => '', 'account' => '', 'method' => ''];
@@ -44,7 +46,7 @@ function email_configured(array $c): bool { return filter_var($c['from'], FILTER
 function mime_header(string $s): string { $s = str_replace(["\r", "\n"], ' ', $s); return preg_match('/[^\x20-\x7e]/', $s) ? '=?UTF-8?B?' . base64_encode($s) . '?=' : $s; }
 function clean_header(string $s): string { return trim(str_replace(["\r", "\n", "\0"], ' ', $s)); }
 function email_html(string $text): string {
-    $body = nl2br(preg_replace('~(https?://[^\s<]+)~', '<a href="$1">$1</a>', e($text)) ?? e($text));
+    $body = nl2br(preg_replace_callback('~https?://[^\s<&"\']+~', function ($m) { $u = rtrim($m[0], '.,;:!?)'); return '<a href="' . $u . '">' . $u . '</a>' . substr($m[0], strlen($u)); }, e($text)) ?? e($text)); // trailing punctuation stays outside the link
     return '<!doctype html><html><body style="margin:0;background:#f5f5f3;font-family:Arial,Helvetica,sans-serif;color:#141414"><div style="max-width:520px;margin:0 auto;padding:24px"><div style="background:#fff;border-radius:16px;padding:24px;line-height:1.55;font-size:15px">' . $body . '</div></div></body></html>';
 }
 /** Builds the raw message (headers + multipart body), CRLF line ends. */

@@ -7,6 +7,7 @@ function page_analysis(): void {
     $q = fn(array $x) => url('/analysis', array_merge(['month' => $month === $cur ? null : $month, 'type' => $isExp ? null : 'income'], $x));
     layout_start('Analysis', 'analysis', $s, ['hero' => true]);
     ?>
+<h1 class="sr-only">Analysis: <?= e(strtolower($label)) ?> for <?= e(month_label($month)) ?></h1>
 <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6">
   <section class="m-hero pb-14 lg:rounded-[36px] lg:pb-8" aria-label="Spending shape">
     <div class="flex items-center justify-between gap-3 px-5 pt-[calc(env(safe-area-inset-top)+18px)] lg:pt-6">

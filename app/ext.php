@@ -93,6 +93,8 @@ function dock_pages(bool $admin = false): array {
     $p = ['dashboard' => ['Dashboard', '/', 'layout-dashboard'], 'accounts' => ['Accounts', '/accounts', 'landmark'], 'transactions' => ['Transactions', '/transactions', 'arrow-left-right'], 'budget' => ['Budget', '/budget', 'calendar-check'],
         'goals' => ['Goals', '/goals', 'goal'], 'house' => ['House', '/house', 'house'], 'big' => ['Big purchases', '/big-purchases', 'shopping-cart'], 'bills' => ['Bills', '/bills', 'bell-ring'], 'yearly' => ['Yearly', '/yearly', 'calendar-clock'],
         'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'sparkles'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
+    $ai = site_setting('ai_enabled', '0') === '1' || $admin; if (!$ai) { unset($p['ai']); }
+    $paidAny = false; foreach (array_keys(FEATURES) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $paidAny = true; } } if (!$paidAny) { unset($p['plans']); }
     if ($admin) { $p['admin'] = ['Admin', '/admin', 'shield-check']; }
     return $p;
 }

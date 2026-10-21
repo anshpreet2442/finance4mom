@@ -28,7 +28,7 @@ function progress(float $pct, string $tone = 'lime', string $label = ''): string
 function card_open(string $title = '', string $sub = '', string $actions = '', string $class = ''): void {
     echo '<section class="card min-w-0 ' . e($class) . '">';
     if ($title !== '' || $actions !== '') {
-        echo '<header class="flex items-start justify-between gap-3 px-6 pt-5"><div class="min-w-0"><h2 class="text-lg font-semibold tracking-tight">' . $title . '</h2>' . ($sub !== '' ? '<p class="text-sm text-mute">' . $sub . '</p>' : '') . '</div>' . ($actions !== '' ? '<div class="flex shrink-0 items-center gap-2">' . $actions . '</div>' : '') . '</header>';
+        echo '<header class="flex flex-wrap items-start justify-between gap-3 px-6 pt-5"><div class="min-w-0 flex-1"><h2 class="text-lg font-semibold tracking-tight">' . $title . '</h2>' . ($sub !== '' ? '<p class="text-sm text-mute">' . $sub . '</p>' : '') . '</div>' . ($actions !== '' ? '<div class="flex max-w-full flex-wrap items-center gap-2">' . $actions . '</div>' : '') . '</header>';
     }
     echo '<div class="p-6' . ($title !== '' ? ' pt-4' : '') . '">';
 }
