@@ -272,11 +272,13 @@ function import_commit(int $uid, string $token, array $ch): array {
         // balances
         $keep = ($ch['mode'] ?? 'keep') === 'keep'; $adjusted = 0;
         if ($keep) {
+            $done = [];
             foreach ($accId as $ai => $aid) {
-                $e = $net[$aid] ?? 0; $a = $accounts[$aid];
+                if (isset($done[$aid])) { continue; } $done[$aid] = true;   // two statement accounts can be mapped to one of yours: correct it once
+                $e = $net[$aid] ?? 0; $a = $accounts[$aid]; $first = min(array_map(fn($k) => $minDate[$k], array_keys($accId, $aid)));
                 if (!empty($a['new'])) { $target = $ch['bal'][$ai] ?? ''; $target = $target === '' ? 0 : (int) $target; run('UPDATE {accounts} SET opening_balance=? WHERE id=? AND user_id=?', [$target - $e, $aid, $uid]); }
                 elseif ($e !== 0) {
-                    $d = max($a['opening_date'], day_before($minDate[$ai])); if ($d < $a['opening_date']) { $d = $a['opening_date']; }
+                    $d = max($a['opening_date'], day_before($first)); if ($d < $a['opening_date']) { $d = $a['opening_date']; }
                     insert('INSERT INTO {transactions} (user_id,type,status,amount,date,account_id,description,notes,import_id) VALUES (?,?,?,?,?,?,?,?,?)',
                         [$uid, 'adjustment', 'completed', -$e, $d, $aid, 'Balance correction for ' . import_source_label($source) . ' import', 'Keeps today\'s balance unchanged. It is removed together with the import.', $imp]); $adjusted++;
                 }

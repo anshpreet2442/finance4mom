@@ -42,7 +42,7 @@ function workbook_load(string $path, string $origName = ''): array {
     $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
     $binary = strpos($head, "\0") !== false || preg_match('/^(%PDF|\x89PNG|GIF8|\xFF\xD8\xFF|MZ|\x7FELF|Rar!)/', $head);
     if ($binary) { throw new XlsxError('That file is not a spreadsheet. Upload the .xlsx statement (or a .csv).'); }
-    if (in_array($ext, ['csv', 'txt', ''], true) || $ext === 'xlsx' && !str_contains($head, '<')) { return csv_read($path); }
+    if (in_array($ext, ['csv', 'txt', ''], true)) { return csv_read($path); }
     throw new XlsxError('That file is not a spreadsheet. Upload the .xlsx statement (or a .csv).');
 }
 

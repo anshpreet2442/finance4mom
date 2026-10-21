@@ -131,7 +131,8 @@ function paytm_adapter(): array {
                 if ($s['kind'] !== 'worksheet') { continue; }
                 $hdr = imp_find_header($s['rows'], paytm_vocab(), 4);
                 if (!$hdr && paytm_is_summary($s)) { $score += 0.55; }
-                if ($hdr) { $hasTx = true; $score += 0.2; if (preg_match('/passbook|payment ?history/i', $s['name'])) { $score += 0.15; } }
+                if ($hdr) { $hasTx = true; $score += 0.2; if (count($hdr[1]) >= 6 && isset($hdr[1]['other'], $hdr[1]['ref'])) { $score += 0.3; }   // the full Paytm column set is evidence enough without a Summary sheet
+                if (preg_match('/passbook|payment ?history/i', $s['name'])) { $score += 0.15; } }
             }
             if ($hasTx) { $score += 0.1; }
             return min(1.0, $score) * ($hasTx ? 1.0 : 0.6);   // no transaction sheet => not importable

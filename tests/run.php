@@ -490,6 +490,7 @@ eq(json_encode($fixed[2]['input']), '{"month":"2026-10"}', 'a filled tool input 
 
 $AIM = $AIM ?? null; require __DIR__ . '/c_tests.php'; // Builder-C: layout, voice, PDF, share links, QR, payment page
 require __DIR__ . '/telegram_tests.php';
+require __DIR__ . '/import_tests.php'; // statement import (Builder-D)
 
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);
