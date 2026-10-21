@@ -7,7 +7,14 @@ const AI_UPLOAD_PER_MESSAGE = 4;
 const AI_UPLOAD_PER_HOUR = 20;
 const AI_UPLOAD_TYPES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp', 'application/pdf' => 'pdf', 'text/plain' => 'txt', 'text/csv' => 'csv'];
 function ai_upload_dir(): string { $d = rtrim(sys_get_temp_dir(), '/') . '/mfnc-ai-uploads'; if (!is_dir($d)) { @mkdir($d, 0700, true); } return $d; }
-function ai_upload_limits(): array { return ['max_bytes' => AI_UPLOAD_MAX, 'max_files' => AI_UPLOAD_PER_MESSAGE, 'types' => array_keys(AI_UPLOAD_TYPES), 'accept' => 'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,.txt,.csv']; }
+/** The real per-file limit: the app's 5 MB, or the server's upload_max_filesize / post_max_size when that is smaller (PHP's default is only 2 MB). */
+function ai_upload_max(): int {
+    $ini = function (string $k): int { $v = trim((string) ini_get($k)); if ($v === '') { return PHP_INT_MAX; } $n = (int) $v; switch (strtolower(substr($v, -1))) { case 'g': $n *= 1024; // no break
+        case 'm': $n *= 1024; // no break
+        case 'k': $n *= 1024; } return $n > 0 ? $n : PHP_INT_MAX; };
+    return max(1024, min(AI_UPLOAD_MAX, $ini('upload_max_filesize'), $ini('post_max_size') - 65536));
+}
+function ai_upload_limits(): array { return ['max_bytes' => ai_upload_max(), 'max_files' => AI_UPLOAD_PER_MESSAGE, 'types' => array_keys(AI_UPLOAD_TYPES), 'accept' => 'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,.txt,.csv']; }
 /** Cleans leftovers older than a day (called opportunistically on upload). */
 function ai_upload_gc(): void {
     foreach (all('SELECT id,path FROM {ai_uploads} WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 86400)]) as $r) { @unlink(ai_upload_dir() . '/' . basename($r['path'])); run('DELETE FROM {ai_uploads} WHERE id=?', [$r['id']]); }
@@ -15,7 +22,7 @@ function ai_upload_gc(): void {
 /** Stores one uploaded file (a $_FILES entry, or ['tmp_name','name','size'] in tests). Returns the row summary. Throws UserError with a friendly reason. */
 function ai_store_upload(array $u, array $f): array {
     $uid = (int) $u['id']; $err = (int) ($f['error'] ?? 0);
-    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) { throw new UserError('That file is too big (limit ' . (AI_UPLOAD_MAX >> 20) . ' MB).'); }
+    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) { throw new UserError('That file is too big (limit ' . max(1, (int) round(ai_upload_max() / 1048576)) . ' MB).'); }
     if ($err !== 0 || empty($f['tmp_name']) || !is_file($f['tmp_name'])) { throw new UserError('The upload did not finish. Try again.'); }
     $size = (int) filesize($f['tmp_name']); if ($size <= 0) { throw new UserError('That file is empty.'); } if ($size > AI_UPLOAD_MAX) { throw new UserError('That file is too big (limit ' . (AI_UPLOAD_MAX >> 20) . ' MB).'); }
     if ((int) val('SELECT COUNT(*) FROM {ai_uploads} WHERE user_id=? AND created_at >= ?', [$uid, gmdate('Y-m-d H:i:s', time() - 3600)]) >= AI_UPLOAD_PER_HOUR) { throw new UserError('Too many uploads this hour. Try again later.'); }
