@@ -159,7 +159,7 @@ run('UPDATE {users} SET role=? WHERE id=?', ['admin', $A]); $_POST = ['id' => (s
 throws(fn() => do_admin_user_status(['id' => $B, 'role' => 'admin']), 'no active administrator', 'cannot disable the last administrator');
 $_POST = ['id' => (string) $B, 'role' => 'admin']; do_admin_user_role(['id' => $A, 'role' => 'admin']); $_POST = ['id' => (string) $A, 'status' => 'disabled']; do_admin_user_status(['id' => $B, 'role' => 'admin']);
 throws(fn() => attempt_login('a@x.test', 'password-12345'), 'disabled', 'disabled users cannot sign in');
-eq(val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME LIKE ?', [DB_NAME, '%\\_mfnt']), count(mfnc_schema()), 'every table was auto-created with the suffix');
+eq(val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME LIKE ?', [DB_NAME, '%\\_mfnt']), count(mfnc_schema()) + count(c_schema()), 'every table was auto-created with the suffix');
 
 
 // ================= billing: charges, enforcement, PayU flow (against a mock gateway) =================
@@ -488,6 +488,7 @@ $fixed = ai_fix_content([['type' => 'text', 'text' => 'hi'], ['type' => 'tool_us
 eq(json_encode($fixed[1]['input']), '{}', 'an empty tool input is re-sent as {} (not [])');
 eq(json_encode($fixed[2]['input']), '{"month":"2026-10"}', 'a filled tool input is untouched');
 
+$AIM = $AIM ?? null; require __DIR__ . '/c_tests.php'; // Builder-C: layout, voice, PDF, share links, QR, payment page
 require __DIR__ . '/telegram_tests.php';
 
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");

@@ -116,7 +116,7 @@ function paypage_extra(array $charge, array $user): array {
 }
 // ============================ pages ============================
 function paypage_shell(string $bodyHtml): string {
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><style>body{margin:0;padding:12px;background:#fff;font:15px/1.5 Arial,Helvetica,sans-serif;color:#1e2823}img{max-width:100%;height:auto}table{border-collapse:collapse}</style></head><body>' . $bodyHtml . '</body></html>';
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light"><style>html{background:#fff}body{margin:0;padding:12px;background:#fff;font:15px/1.5 Arial,Helvetica,sans-serif;color:#1e2823}img{max-width:100%;height:auto}table{border-collapse:collapse}</style></head><body>' . $bodyHtml . '</body></html>';
 }
 /** The sandboxed preview for the admin. Sample data and a disabled stand-in for the pay button. */
 function paypage_preview_html(string $tpl): string {
