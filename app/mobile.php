@@ -17,12 +17,12 @@ function cat_icon(string $name): string {
 function m_hero(array $s, array $u, string $variant = 'home', string $extra = ''): string {
     $cash = total_cash($s['accounts'], $s['txs'], $s['today']); $reserved = reserved_total($s['contribs']); $month = month_of($s['today']);
     $sum = summarize_month($s['accounts'], $s['txs'], $s['contribs'], $month); [$main, $dec] = fmt_parts($cash);
-    $dot = (int) val('SELECT COUNT(*) FROM {notifications} WHERE user_id=? AND is_read=0', [$u['id']]) > 0;
+    $dot = (int) val('SELECT COUNT(*) FROM {notifications} WHERE user_id=? AND is_read=0', [$u['id']]) > 0 && !presence_dnd((int) $u['id']);   // Do not disturb hides the dot
     $growth = $sum['opening'] > 0 ? ($cash - $sum['opening']) / $sum['opening'] * 100 : null;
     $chip = $growth !== null ? icon($growth >= 0 ? 'arrow-up-right' : 'arrow-down-right', 'size-4') . number_format(abs($growth), 2) . '% this month' : 'Saved ' . fmt($sum['net']) . ' this month';
     $accts = active_accounts($s); $first = $accts[0]['name'] ?? 'Account';
     $o = '<header class="m-hero lg:hidden ' . ($variant === 'home' ? 'pb-0' : 'pb-9') . '"><div class="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+18px)]">'
-        . '<button type="button" data-nav-open class="grid size-12 place-items-center overflow-hidden rounded-full m-glass text-lg font-semibold" aria-label="Open menu">' . e(mb_strtoupper(mb_substr($u['name'], 0, 1))) . '</button>'
+        . acct_menu_html($u, ['variant' => 'hero', 'align' => 'start', 'theme' => prefs()['theme'] ?? 'system'])
         . '<a href="' . e(url('/dues')) . '" class="relative grid size-12 place-items-center rounded-full m-glass" aria-label="Reminders">' . icon('bell', 'size-5') . ($dot ? '<span class="absolute right-3 top-3 size-2.5 rounded-full bg-amber-300 ring-2 ring-red-700/40"></span>' : '') . '</a></div>'
         . '<div class="mt-' . ($variant === 'home' ? '7' : '5') . ' px-5 text-center"><p class="text-lg text-white/90">' . ($variant === 'home' ? 'Balance' : e($extra ?: 'Balance')) . '</p><p class="m-amount mt-2"><span data-count data-live="cash">' . e($main) . '</span><small>' . e($dec) . '</small></p><span class="m-chip mt-4">' . $chip . '</span></div>';
     if ($variant === 'home') {
@@ -97,7 +97,7 @@ function analysis_data(array $s, string $month, string $type): array {
 
 /** Ember header for pages that are not about the balance (dues, etc.). */
 function m_banner(array $u, string $label, string $big, string $chip = ''): string {
-    return '<header class="m-hero lg:hidden pb-10"><div class="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+18px)]"><button type="button" data-nav-open class="grid size-12 place-items-center rounded-full m-glass text-lg font-semibold" aria-label="Open menu">' . e(mb_strtoupper(mb_substr($u['name'], 0, 1))) . '</button>'
+    return '<header class="m-hero lg:hidden pb-10"><div class="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+18px)]">' . acct_menu_html($u, ['variant' => 'hero', 'align' => 'start', 'theme' => prefs()['theme'] ?? 'system'])
         . '<button type="button" data-theme-toggle class="grid size-12 place-items-center rounded-full m-glass" aria-label="Toggle dark mode">' . icon('moon', 'size-5') . '</button></div>'
         . '<div class="mt-5 px-5 text-center"><p class="text-lg text-white/90">' . e($label) . '</p><p class="m-amount mt-2">' . $big . '</p>' . ($chip ? '<span class="m-chip mt-4">' . $chip . '</span>' : '') . '</div></header>';
 }

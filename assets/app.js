@@ -211,7 +211,7 @@
       setBadge('[data-live-badge=dues]', j.dues); setBadge('[data-live-badge=bills]', j.overdue);
       if (last) {
         $$('[data-live=cash]').forEach(function (el) { if (j.cash !== last.cash) { el.textContent = window.MfncFmt(j.cash); el.classList.add('shimmer'); setTimeout(function () { el.classList.remove('shimmer'); }, 2600); countUp(el); } });
-        if (j.unread > last.unread && window.toast) toast({ type: 'info', title: 'New reminder', text: 'Something changed on your dues or bills.', action: { label: 'View', href: (body.getAttribute('data-base') || '') + '/dues' } });
+        if (j.unread > last.unread && window.toast && body.getAttribute('data-presence') !== 'busy') toast({ type: 'info', title: 'New reminder', text: 'Something changed on your dues or bills.', action: { label: 'View', href: (body.getAttribute('data-base') || '') + '/dues' } });
         if (j.level !== last.level) { if (window.toast) toast({ type: j.level > last.level ? 'warn' : 'ok', title: j.level > last.level ? 'Payment overdue' : 'You are back on track', text: j.level > last.level ? 'Some features are limited until your dues are paid.' : 'Everything is available again.' }); setTimeout(function () { location.reload(); }, 2500); }
       }
       last = j;

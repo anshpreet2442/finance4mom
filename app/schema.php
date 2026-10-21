@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
@@ -33,6 +33,7 @@ function mfnc_schema(): array {
         user_id INT UNSIGNED PRIMARY KEY,
         currency CHAR(3) NOT NULL DEFAULT 'INR', locale VARCHAR(10) NOT NULL DEFAULT 'en-IN',
         theme ENUM('system','light','dark') NOT NULL DEFAULT 'system',
+        presence VARCHAR(8) NOT NULL DEFAULT 'online',
         reminder_days TINYINT UNSIGNED NOT NULL DEFAULT 7,
         big_purchase_threshold BIGINT NOT NULL DEFAULT 10000000,
         $ts,
@@ -354,6 +355,7 @@ function mfnc_migrate(): void {
         ['users', 'ai_budget_micro', 'BIGINT NULL'],
         ['transactions', 'source', 'VARCHAR(20) NULL'], ['transactions', 'source_ref', 'VARCHAR(80) NULL'], ['transactions', 'import_id', 'INT UNSIGNED NULL'], ['transactions', 'remarks', 'VARCHAR(500) NULL'], ['transactions', 'txn_time', 'TIME NULL'], ['transactions', 'source_meta', 'VARCHAR(1000) NULL'],
         ['preferences', 'show_import_labels', 'TINYINT(1) NOT NULL DEFAULT 1'],
+        ['preferences', 'presence', "VARCHAR(8) NOT NULL DEFAULT 'online'"],   // v12: online / away / busy (do not disturb)
         ['charges', 'feature', 'VARCHAR(30) NULL'], ['charges', 'buy_key', 'VARCHAR(40) NULL'], ['charges', 'feature_days', 'SMALLINT UNSIGNED NULL'], ['charges', 'topup_micro', 'BIGINT NULL'],
     ];
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }

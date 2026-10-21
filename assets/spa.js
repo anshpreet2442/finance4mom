@@ -62,7 +62,7 @@
     body.classList.toggle('has-dock', doc.body.classList.contains('has-dock'));
     var tx = d.getElementById('tx-dialog'), ntx = doc.getElementById('tx-dialog'); if (tx && ntx && !tx.open) tx.replaceWith(d.importNode(ntx, true));
     var b1 = d.querySelector('#confirm-form [name=_back]'), b2 = doc.querySelector('#confirm-form [name=_back]'); if (b1 && b2) b1.value = b2.value;
-    ['data-csrf', 'data-passkeys', 'data-locale', 'data-symbol'].forEach(function (a) { if (doc.body.hasAttribute(a)) body.setAttribute(a, doc.body.getAttribute(a)); });
+    ['data-csrf', 'data-passkeys', 'data-locale', 'data-symbol', 'data-presence'].forEach(function (a) { if (doc.body.hasAttribute(a)) body.setAttribute(a, doc.body.getAttribute(a)); });
     var sb = d.getElementById('sidebar'), sc = d.getElementById('scrim'); if (sb) sb.classList.remove('is-open'); if (sc) sc.classList.add('hidden');
     var m = d.getElementById('main'); runScripts(m);
     if (!(d.startViewTransition && !reduce) && !reduce && o.animate) { m.classList.add('page-in'); }

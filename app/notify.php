@@ -119,6 +119,7 @@ function notify_email(int $uid, string $event, array $vars, ?bool $choice = null
     try {
         $c = email_cfg(); if (!$c['enabled'] || !email_configured($c)) { return false; }
         $u = one('SELECT u.id,u.name,u.email,u.role,p.email_alerts FROM {users} u LEFT JOIN {preferences} p ON p.user_id=u.id WHERE u.id=?', [$uid]); if (!$u) { return false; }
+        if (function_exists('dnd_blocks') && dnd_blocks($uid, $event)) { return false; }   // Do not disturb: only critical alerts (overdue payments) get through
         $want = $choice ?? ((int) ($u['email_alerts'] ?? 1) === 1); if (!$want) { return false; }
         if ($gated) { $fa = feature_access($u, 'email'); if (!$fa['ok']) { return false; } }
         [$sub, $body] = email_template($event); $v = template_vars($u, $vars);
@@ -176,6 +177,7 @@ function sms_charge_alert(int $uid, array $charge, string $kind, bool $force = f
         $c = sms_cfg(); if (!$c['enabled']) { return [false, 'SMS alerts are switched off.']; }
         $u = one('SELECT u.id,u.name,u.role,p.phone,p.sms_alerts FROM {users} u LEFT JOIN {preferences} p ON p.user_id=u.id WHERE u.id=?', [$uid]); if (!$u || !$u['phone']) { return [false, 'This person has not added a phone number.']; }
         if (!$force && !(int) $u['sms_alerts']) { return [false, 'This person turned SMS alerts off.']; }
+        if (!$force && function_exists('dnd_blocks') && dnd_blocks($uid, $kind)) { return [false, 'This person is in Do not disturb.']; }
         $v = template_vars($u, ['title' => $charge['title'], 'amount' => fmt_inr(charge_payable($charge)), 'due_date' => date_label($charge['due_date']), 'link' => charge_link($uid, $charge, $c)]);
         return send_sms((string) $u['phone'], render_template($c['template'], $v), $uid, $kind);
     } catch (Throwable $e) { log_error($e); return [false, 'Could not send the SMS.']; }

@@ -273,9 +273,9 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
 <meta name="pills-src" content="<?= e(asset('pills.svg')) ?>"><link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <script>try{var d=document.documentElement;d.classList.add('js');var t=localStorage.getItem('mfnc-theme')||d.dataset.theme;if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');var p=localStorage.getItem('mfnc-palette');if(p)d.setAttribute('data-palette',p);<?php if ($s): ?>if(!sessionStorage.getItem('mfnc-seen')||sessionStorage.getItem('mfnc-reload'))d.classList.add('has-splash');<?php endif; ?>}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('promptbar.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><link rel="stylesheet" href="<?= e(asset('c.css')) ?>"><script src="<?= e(asset('voice.js')) ?>"></script><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>"><link rel="stylesheet" href="<?= e(asset('import.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('promptbar.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><link rel="stylesheet" href="<?= e(asset('c.css')) ?>"><script src="<?= e(asset('voice.js')) ?>"></script><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>"><link rel="stylesheet" href="<?= e(asset('import.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ring.css')) ?>"><link rel="stylesheet" href="<?= e(asset('accountmenu.css')) ?>">
 </head>
-<body class="bg-page text-ink antialiased<?= !empty($GLOBALS['__dock']) ? ' has-dock' : '' ?>" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
+<body class="bg-page text-ink antialiased<?= !empty($GLOBALS['__dock']) ? ' has-dock' : '' ?>" data-presence="<?= e($s ? presence_get((int) $u['id']) : 'online') ?>" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-card">Skip to content</a>
 <?php if ($s): ?>
 <div id="splash" class="splash" aria-hidden="true">
@@ -290,6 +290,7 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
   <div id="scrim" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden" data-nav-close></div>
   <aside id="sidebar" class="sidebar" aria-label="Sidebar">
     <a href="<?= e(url('/')) ?>" class="mb-8 flex items-center gap-2.5 px-3 text-xl font-bold tracking-tight"><span class="grid size-8 place-items-center rounded-xl bg-lime text-white"><?= icon('trending-up', 'size-5') ?></span><?= e(APP_NAME) ?></a>
+    <?php if ($s): ?><div class="mb-4 lg:hidden" data-side-account><?= acct_menu_html($u, ['variant' => 'side', 'align' => 'start', 'theme' => $theme]) ?></div><?php endif; ?>
     <nav id="mf-nav" class="flex-1 space-y-1 overflow-y-auto pr-1" aria-label="Main">
       <?php foreach (nav_items($u) as $it): $ga = $groupActive($it); ?>
         <?php if (empty($it[4])): ?>
@@ -327,14 +328,14 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
       <div class="ml-auto flex items-center gap-2">
         <span class="hidden items-center gap-2 px-2 text-xs text-mute sm:flex" aria-hidden="true"><span class="live-dot" id="live-dot" title="Live"></span>Live</span>
         <button type="button" class="btn btn-icon" data-theme-toggle aria-label="Toggle dark mode"><?= icon('moon', 'size-5') ?></button>
-        <details class="relative"><summary class="btn btn-icon list-none cursor-pointer" aria-label="Reminders"><?= icon('bell', 'size-5') ?><?php if ($notes): ?><span class="absolute right-2 top-2 size-2 rounded-full bg-neg"></span><?php endif; ?></summary>
+        <details class="relative"><summary class="btn btn-icon list-none cursor-pointer" aria-label="Reminders"><?= icon('bell', 'size-5') ?><?php if ($notes && !($s && presence_dnd((int) $u['id']))): ?><span class="absolute right-2 top-2 size-2 rounded-full bg-neg" data-notif-dot></span><?php endif; ?></summary>
           <div class="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-3xl border border-line bg-card p-3 shadow-xl">
             <p class="px-2 pb-2 text-sm font-semibold">Reminders</p>
             <?php if (!$notes): ?><p class="px-2 py-3 text-sm text-mute">Nothing due soon.</p><?php endif; ?>
             <?php foreach ($notes as $n): ?><a href="<?= e(url(in_array($n['kind'], ['due', 'overdue', 'paid'], true) ? '/dues' : '/bills')) ?>" class="block rounded-2xl px-2 py-2 text-sm hover:bg-soft"><span class="font-medium"><?= e($n['title']) ?></span><span class="block text-xs text-mute"><?= e($n['body']) ?></span></a><?php endforeach; ?>
           </div></details>
         <a href="<?= e(url('/settings')) ?>" class="btn btn-icon hidden sm:grid" aria-label="Settings"><?= icon('settings', 'size-5') ?></a>
-        <div class="hidden items-center gap-3 rounded-2xl bg-card px-3 py-2 md:flex"><span class="grid size-9 place-items-center rounded-full bg-lime/30 text-sm font-semibold"><?= e(mb_strtoupper(mb_substr($u['name'], 0, 1))) ?></span><span class="leading-tight"><span class="block text-sm font-medium"><?= e($u['name']) ?></span><span class="block text-xs text-mute"><?= e($u['email']) ?></span></span></div>
+        <?= acct_menu_html($u, ['variant' => 'bar', 'align' => 'end', 'theme' => $theme]) ?>
         <?php if ($s): ?><button type="button" class="btn btn-light hidden sm:inline-flex" data-tx-new><?= icon('circle-plus', 'size-4') ?> Add transaction</button><?php endif; ?>
       </div>
     </header>
@@ -368,7 +369,7 @@ function layout_end(): void {
     }
     if (!empty($GLOBALS['__dock'])) { echo $GLOBALS['__dock']; }
     if ($x['intro']) { echo intro_html(); }
-    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('motion.js')) . '"></script><script src="' . e(asset('statusmark.js')) . '"></script><script src="' . e(asset('promptbar.js')) . '"></script><script src="' . e(asset('pillsmark.js')) . '" defer></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script><script src="' . e(asset('upfb.js')) . '" defer></script><script src="' . e(asset('import.js')) . '" defer></script></body></html>';
+    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('motion.js')) . '"></script><script src="' . e(asset('ring.js')) . '"></script><script src="' . e(asset('statusmark.js')) . '"></script><script src="' . e(asset('promptbar.js')) . '"></script><script src="' . e(asset('pillsmark.js')) . '" defer></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('accountmenu.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script><script src="' . e(asset('upfb.js')) . '" defer></script><script src="' . e(asset('import.js')) . '" defer></script></body></html>';
 }
 function render_error(int $code, string $title, string $msg): void {
     http_response_code($code);

@@ -97,6 +97,7 @@ function tg_notify(int $uid, string $event, array $vars, ?string $dedupe = null,
     try {
         $c = tg_cfg(); if (!tg_ready($c) || !$c['notify']) { return false; }
         $l = tg_link_for($uid); if (!$l || (!(int) $l['notify'] && !$force)) { return false; }
+        if (!$force && function_exists('dnd_blocks') && dnd_blocks($uid, $event)) { return false; }   // Do not disturb: held back without using the once-only key, so a later run can still send it
         $u = tg_user($uid); if (!$u || $u['status'] !== 'active' || !feature_on($u, 'telegram')) { return false; }
         if ($dedupe !== null && run('INSERT IGNORE INTO {telegram_sent} (user_id,dedupe_key) VALUES (?,?)', [$uid, mb_substr($dedupe, 0, 80)]) !== 1) { return false; }
         tg_boot($u); $text = render_template(tg_template($event), template_vars($u, $vars));

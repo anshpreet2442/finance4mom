@@ -19,15 +19,15 @@ header('X-Frame-Options: DENY');
 header('X-Mfnc-App: 1');   // lets our own scripts tell an answer from this app apart from a hosting firewall page
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+header('Permissions-Policy: camera=(), microphone=(self), geolocation=()');   // the voice assistant listens through the microphone, on this origin only
 if (!in_array(request_path(), ['/sw.js', '/manifest.webmanifest'], true)) { header('Cache-Control: no-store'); }
 
 $path = request_path();
 
 function request_headers(): array { $h = []; foreach ($_SERVER as $k => $v) { if (str_starts_with($k, 'HTTP_')) { $h[str_replace('_', '-', substr($k, 5))] = $v; } } return $h; }
 const LOCKED_GET = ['/api/pulse', '/dues', '/dues/return', '/credits', '/offline', '/manifest.webmanifest', '/sw.js', '/settings/backup', '/transactions/export'];
-const LOCKED_POST = ['dues-pay', 'logout', 'theme-quick'];
-const READONLY_POST = ['dues-pay', 'logout', 'theme-quick', 'prefs-save', 'profile-save', 'password-change', 'notifications-read'];
+const LOCKED_POST = ['dues-pay', 'logout', 'theme-quick', 'presence-set'];
+const READONLY_POST = ['dues-pay', 'logout', 'theme-quick', 'presence-set', 'prefs-save', 'profile-save', 'password-change', 'notifications-read'];
 
 // ---- gateway webhook: public, signature-checked, no session / CSRF ----
 if (method() === 'POST' && $path === '/webhooks/payu') {
