@@ -97,10 +97,10 @@ function do_dock_order(array $u): ?string {
 
 // ---------------- plans & wallet (user) ----------------
 function do_plan_buy(array $u): ?string {
-    $f = in_enum('feature', array_keys(FEATURES)); $c = feature_cfg($f);
+    $f = in_enum('feature', array_keys(features())); $c = feature_cfg($f);
     if ($c['mode'] !== 'paid' || $c['price'] <= 0) { throw new UserError('That is not sold as a plan.'); }
-    $id = create_self_charge((int) $u['id'], FEATURES[$f]['label'] . ' · ' . $c['days'] . ' days', $c['price'], ['feature' => $f, 'days' => $c['days'], 'desc' => 'Access to ' . FEATURES[$f]['label']]);
-    $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below to unlock ' . FEATURES[$f]['label'] . '.';
+    $id = create_self_charge((int) $u['id'], features()[$f]['label'] . ' · ' . $c['days'] . ' days', $c['price'], ['feature' => $f, 'days' => $c['days'], 'desc' => 'Access to ' . features()[$f]['label']]);
+    $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below to unlock ' . features()[$f]['label'] . '.';
 }
 function do_wallet_topup(array $u): ?string {
     $amt = in_money('amount', true, false, false, 'Amount'); if ($amt < 1000 || $amt > 5000000) { throw new UserError('Top up between ₹10 and ₹50,000.'); }
@@ -112,11 +112,11 @@ function do_wallet_topup(array $u): ?string {
 function do_admin_features_save(array $u): string {
     // validate everything first, then write, so a rejected save leaves the stored plans untouched
     $rows = [];
-    foreach (FEATURES as $f => $m) {
+    foreach (features() as $f => $m) {
         $mode = in_enum("mode_$f", $m['modes']);
         $price = in_money("price_$f", false, false, true, 'Price');
         $days = in_int("days_$f", 1, 366, 30);
-        $unit = (in_array('payg', $m['modes'], true) && $f !== 'ai') ? post_micro("unit_$f") : null;
+        $unit = (in_array('payg', $m['modes'], true) && empty($m['metered']) && $f !== 'ai') ? post_micro("unit_$f") : null;
         if ($mode === 'paid' && $price <= 0) { throw new UserError($m['label'] . ' is marked paid, so it needs a price.'); }
         $rows[$f] = [$mode, $price, $days, $unit];
     }
@@ -127,7 +127,7 @@ function do_admin_features_save(array $u): string {
     audit('admin.features', 'site'); return 'Plans saved.';
 }
 function do_admin_user_grant(array $u): string {
-    $uid = in_id('user_id', 'person'); $f = in_enum('feature', array_keys(FEATURES)); if (!one('SELECT id FROM {users} WHERE id=?', [$uid])) { throw new UserError('User not found.'); }
+    $uid = in_id('user_id', 'person'); $f = in_enum('feature', array_keys(features())); if (!one('SELECT id FROM {users} WHERE id=?', [$uid])) { throw new UserError('User not found.'); }
     if (in_str('op', 10) === 'revoke') { revoke_feature($uid, $f); audit('admin.feature.revoke', "user#$uid", $f); return 'Access removed.'; }
     $until = grant_feature($uid, $f, in_int('days', 1, 3650, 30), 'admin'); audit('admin.feature.grant', "user#$uid", "$f until $until"); return 'Access granted until ' . date_label($until) . '.';
 }

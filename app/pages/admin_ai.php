@@ -39,7 +39,7 @@ function page_admin_features(): void {
     $me = require_admin(); admin_start('Plans & usage', 'features'); $monthStart = gmdate('Y-m-01 00:00:00');
     // ---- feature pricing
     $modes = ['free' => 'Free for everyone', 'paid' => 'Paid plan (time-limited access)', 'payg' => 'Pay as you go (wallet)']; $rows = '';
-    foreach (FEATURES as $f => $m) { $c = feature_cfg($f);
+    foreach (features() as $f => $m) { $c = feature_cfg($f);
         $opts = ''; foreach ($m['modes'] as $md) { $opts .= '<option value="' . $md . '"' . ($c['mode'] === $md ? ' selected' : '') . '>' . e($modes[$md]) . '</option>'; }
         $rows .= '<div class="rounded-2xl border border-line p-4"><div class="flex flex-wrap items-start justify-between gap-2"><div><p class="font-semibold">' . e($m['label']) . '</p><p class="text-xs text-mute">' . e($m['desc']) . '</p></div>' . ($c['mode'] === 'free' ? badge('Free', 'pos') : ($c['mode'] === 'paid' ? badge('Paid plan', 'warn') : badge('Pay as you go', 'dark'))) . '</div>'
             . '<div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><div class="col-span-2"><label class="label" for="m-' . $f . '">Mode</label><select class="input" id="m-' . $f . '" name="mode_' . $f . '">' . $opts . '</select></div>'
@@ -63,11 +63,11 @@ function page_admin_features(): void {
     echo '</div></section></div>';
     // ---- per user
     $users = all('SELECT u.id,u.name,u.email,u.role,u.ai_budget_micro,(SELECT COALESCE(SUM(cost_micro),0) FROM {ai_usage} a WHERE a.user_id=u.id AND a.created_at >= ?) AS spent,(SELECT COALESCE(SUM(amount_micro),0) FROM {wallet_ledger} w WHERE w.user_id=u.id) AS wallet FROM {users} u WHERE u.status=? ORDER BY spent DESC, u.name LIMIT 200', [$monthStart, 'active']);
-    $ent = []; foreach (all('SELECT user_id,feature,valid_until FROM {entitlements} WHERE valid_until >= ?', [today()]) as $e) { $ent[$e['user_id']][] = FEATURES[$e['feature']]['label'] . ' until ' . date_label($e['valid_until']); }
+    $ent = []; foreach (all('SELECT user_id,feature,valid_until FROM {entitlements} WHERE valid_until >= ?', [today()]) as $e) { $ent[$e['user_id']][] = features()[$e['feature']]['label'] . ' until ' . date_label($e['valid_until']); }
     $defB = ai_cfg()['default_budget']; echo '<div class="mt-5">'; card_flush_open('People', 'AI spend this month, budget, wallet and plan access. Budget blank = default (' . ($defB ? micro_to_inr($defB) : 'no cap') . ').');
     echo '<div class="relative overflow-x-auto"><table class="w-full min-w-[820px]"><thead><tr class="border-b border-line"><th class="th">User</th><th class="th text-right">AI spend</th><th class="th text-right">Budget</th><th class="th text-right">Wallet</th><th class="th">Plans</th><th class="th"><span class="sr-only">Actions</span></th></tr></thead><tbody class="divide-y divide-line">';
     foreach ($users as $x) { $id = (int) $x['id']; $b = $x['ai_budget_micro'] === null ? null : (int) $x['ai_budget_micro'];
-        $featOpts = []; foreach (FEATURES as $k => $m) { $featOpts[$k] = $m['label']; }
+        $featOpts = []; foreach (features() as $k => $m) { $featOpts[$k] = $m['label']; }
         echo '<tr><td class="td"><p class="font-medium">' . e($x['name']) . ($x['role'] === 'admin' ? ' ' . badge('Admin', 'dark') : '') . '</p><p class="text-xs text-mute">' . e($x['email']) . '</p></td><td class="td num text-right">' . e(micro_to_inr((int) $x['spent'])) . '</td><td class="td num text-right text-mute">' . ($b === null ? 'default' : ($b ? e(micro_to_inr($b)) : 'no cap')) . '</td><td class="td num text-right">' . e(micro_to_inr((int) $x['wallet'])) . '</td>'
             . '<td class="td text-xs text-mute">' . e(implode(', ', $ent[$id] ?? []) ?: '—') . '</td><td class="td"><div class="flex flex-wrap justify-end gap-1">'
             . dialog_form("bud-$id", 'Budget', 'AI budget for ' . $x['name'], 'admin-user-budget', [['name' => 'user_id', 'type' => 'hidden', 'value' => $id], ['name' => 'budget', 'label' => 'Monthly AI budget (₹). Blank = default, 0 = no cap', 'type' => 'money', 'currency' => '₹', 'value' => $b === null ? '' : micro_input($b)]], 'Save', 'btn btn-ghost btn-sm')
@@ -79,9 +79,9 @@ function page_admin_features(): void {
 function page_plans(): void {
     $u = require_login(); $s = snap(); $uid = (int) $u['id']; layout_start('Plans & wallet', 'plans', $s);
     page_header('Plans & wallet', 'What is free, what is a paid plan, and your pay-as-you-go balance.');
-    $bal = wallet_balance($uid); $anyPayg = false; foreach (FEATURES as $f => $m) { if (feature_cfg($f)['mode'] === 'payg') { $anyPayg = true; } }
+    $bal = wallet_balance($uid); $anyPayg = false; foreach (features() as $f => $m) { if (feature_cfg($f)['mode'] === 'payg') { $anyPayg = true; } }
     echo '<div class="grid gap-5 lg:grid-cols-2"><div class="space-y-4">';
-    foreach (FEATURES as $f => $m) { $c = feature_cfg($f); $fa = feature_access($u, $f); $until = entitlement_until($uid, $f);
+    foreach (features() as $f => $m) { $c = feature_cfg($f); $fa = feature_access($u, $f); $until = entitlement_until($uid, $f);
         $state = is_exempt_user($u) ? badge('Included (admin)', 'dark') : ($c['mode'] === 'free' ? badge('Free', 'pos') : ($c['mode'] === 'paid' ? ($fa['ok'] ? badge('Active until ' . date_label((string) $until), 'pos') : badge('Not purchased', 'warn')) : ($fa['ok'] ? badge('Pay as you go', 'dark') : badge('Wallet empty', 'neg'))));
         $detail = match ($c['mode']) { 'paid' => fmt_inr($c['price']) . ' for ' . $c['days'] . ' days', 'payg' => $f === 'ai' ? 'Billed by usage (tokens), deducted from your wallet' : ($c['unit_micro'] ? micro_to_inr($c['unit_micro']) . ' per message, deducted from your wallet' : 'Deducted from your wallet'), default => 'Included for everyone' };
         echo '<article class="card p-5"><div class="flex flex-wrap items-start justify-between gap-2"><div><h3 class="font-semibold">' . e($m['label']) . '</h3><p class="text-sm text-mute">' . e($m['desc']) . '</p></div>' . $state . '</div><p class="mt-3 text-sm">' . e($detail) . '</p>'

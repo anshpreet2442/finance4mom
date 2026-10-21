@@ -3,6 +3,10 @@ declare(strict_types=1);
 /** HTML components and the page layout (Tailwind classes; icons are inlined Lucide SVGs). */
 
 function icon(string $name, string $cls = 'size-5'): string {
+    if ($name === 'pills') { // the animated AI logo (assets/pillsmark.js); falls back to a static SVG
+        $px = preg_match('/size-(\d+)/', $cls, $m) ? max(24, (int) $m[1] * 4) : 0; $cls = trim((string) preg_replace('/\bsize-\d+\b/', '', $cls));
+        return '<span class="pills-mark ' . e($cls) . '" data-pills' . ($px ? ' data-size="' . $px . '"' : '') . '></span>';
+    }
     static $cache = [];
     if (!isset($cache[$name])) {
         $f = __DIR__ . '/icons/' . preg_replace('/[^a-z0-9-]/', '', $name) . '.svg';
@@ -49,9 +53,9 @@ function empty_state(string $title, string $text = '', string $cta = '', string 
     // $cta is trusted HTML, e.g. '<a class="btn btn-primary" href="...">Add bill</a>'
     return '<div class="empty"><span class="empty-ic">' . icon($ic, 'size-6') . '</span><p class="font-semibold">' . e($title) . '</p>' . ($text ? '<p class="max-w-md text-sm text-mute">' . $text . '</p>' : '') . $cta . '</div>';
 }
-function page_header(string $title, string $sub = '', string $actions = ''): void {
+function page_header(string $title, string $sub = '', string $actions = '', string $lead = ''): void {
     $actions = dock_pin_button() . $actions;
-    echo '<div class="mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">' . e($title) . '</h1>' . ($sub ? '<p class="mt-1 text-sm text-mute">' . e($sub) . '</p>' : '') . '</div>' . ($actions ? '<div class="flex flex-wrap items-center gap-2">' . $actions . '</div>' : '') . '</div>';
+    echo '<div class="mb-6 flex flex-wrap items-end justify-between gap-3"><div' . ($lead ? ' class="flex min-w-0 items-center gap-4"' : '') . '>' . $lead . ($lead ? '<div class="min-w-0">' : '') . '<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">' . e($title) . '</h1>' . ($sub ? '<p class="mt-1 text-sm text-mute">' . e($sub) . '</p>' : '') . ($lead ? '</div>' : '') . '</div>' . ($actions ? '<div class="flex flex-wrap items-center gap-2">' . $actions . '</div>' : '') . '</div>';
 }
 function btn(string $label, string $href, string $cls = 'btn', string $ic = ''): string { return '<a href="' . e($href) . '" class="' . $cls . '">' . ($ic ? icon($ic, 'size-4') : '') . $label . '</a>'; }
 function month_nav(string $month, string $base): string {
@@ -198,8 +202,8 @@ function nav_items(array $u): array {
         ['dues', '/dues', 'Dues & Payments', 'hand-coins'],
         ['reports', '/reports', 'Reports & Insights', 'chart-line'],
     ];
-    if (site_setting('ai_enabled', '0') === '1' || $u['role'] === 'admin') { $items[] = ['ai', '/ai', 'AI advisor', 'sparkles']; }
-    foreach (array_keys(FEATURES) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $items[] = ['plans', '/plans', 'Plans & wallet', 'credit-card']; break; } }
+    if (site_setting('ai_enabled', '0') === '1' || $u['role'] === 'admin') { $items[] = ['ai', '/ai', 'AI advisor', 'pills']; }
+    foreach (array_keys(features()) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $items[] = ['plans', '/plans', 'Plans & wallet', 'credit-card']; break; } }
     $items[] = ['settings', '/settings', 'Settings', 'settings'];
     if ($u['role'] === 'admin') { $items[] = ['admin', '/admin', 'Admin panel', 'shield-check']; }
     return $items;
@@ -258,10 +262,10 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= e($title) ?> · <?= e(APP_NAME) ?></title>
 <meta name="color-scheme" content="light dark"><meta name="theme-color" content="#d23d09" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#2a0a04" media="(prefers-color-scheme: dark)">
-<link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
+<meta name="pills-src" content="<?= e(asset('pills.svg')) ?>"><link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <script>try{var d=document.documentElement;d.classList.add('js');var t=localStorage.getItem('mfnc-theme')||d.dataset.theme;if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');var p=localStorage.getItem('mfnc-palette');if(p)d.setAttribute('data-palette',p);<?php if ($s): ?>if(!sessionStorage.getItem('mfnc-seen')||sessionStorage.getItem('mfnc-reload'))d.classList.add('has-splash');<?php endif; ?>}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('promptbar.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
 </head>
 <body class="bg-page text-ink antialiased<?= !empty($GLOBALS['__dock']) ? ' has-dock' : '' ?>" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-card">Skip to content</a>
@@ -356,7 +360,7 @@ function layout_end(): void {
     }
     if (!empty($GLOBALS['__dock'])) { echo $GLOBALS['__dock']; }
     if ($x['intro']) { echo intro_html(); }
-    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script></body></html>';
+    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('motion.js')) . '"></script><script src="' . e(asset('statusmark.js')) . '"></script><script src="' . e(asset('promptbar.js')) . '"></script><script src="' . e(asset('pillsmark.js')) . '" defer></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script></body></html>';
 }
 function render_error(int $code, string $title, string $msg): void {
     http_response_code($code);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 function landing_tiers(): array {
     $free = []; $paid = []; $payg = [];
-    foreach (FEATURES as $f => $m) { $c = feature_cfg($f);
+    foreach (features() as $f => $m) { $c = feature_cfg($f);
         if ($c['mode'] === 'free') { $free[] = $m['label']; }
         elseif ($c['mode'] === 'paid') { $paid[] = [$m['label'], fmt_inr($c['price']) . ' / ' . $c['days'] . ' days']; }
         else { $payg[] = [$m['label'], $f === 'ai' ? 'billed by usage' : ($c['unit_micro'] ? micro_to_inr($c['unit_micro']) . ' per message' : 'from your wallet')]; } }

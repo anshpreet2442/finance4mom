@@ -85,7 +85,7 @@ function ai_profile(int $uid): array {
 }
 function ai_month_spend(int $uid): int { return (int) val("SELECT COALESCE(SUM(cost_micro),0) FROM {ai_usage} WHERE user_id=? AND created_at >= ?", [$uid, gmdate('Y-m-01 00:00:00')]); }
 function ai_budget(int $uid): int { $b = val('SELECT ai_budget_micro FROM {users} WHERE id=?', [$uid]); return $b === null ? ai_cfg()['default_budget'] : (int) $b; }
-function ai_cost_micro(string $model, int $in, int $out): int { [$pi, $po] = ai_price($model); return (int) ceil($in * $pi + $out * $po); } // tokens x (rupees per 1M tokens) = micro-rupees
+function ai_cost_micro(string $model, int $in, int $out): int { [$pi, $po] = ai_price($model); $m = ai_models_cfg()[$model] ?? ['mult_in' => 1.0, 'mult_out' => 1.0]; return (int) ceil($in * $pi * $m['mult_in'] + $out * $po * $m['mult_out']); } // tokens x (rupees per 1M tokens) = micro-rupees
 /** Everything that can stop a message, in the order the person should hear about it. Returns null when allowed. */
 function ai_gate(array $u, bool $rate = true): ?array {
     $c = ai_cfg(); if ($why = ai_not_ready_reason($c)) { return ['code' => 'not_configured', 'message' => $why]; }
@@ -102,9 +102,9 @@ function ai_gate(array $u, bool $rate = true): ?array {
     return null;
 }
 function ai_record_usage(array $u, string $model, int $in, int $out): int {
-    $cost = ai_cost_micro($model, $in, $out); $uid = (int) $u['id']; $mode = feature_cfg('ai')['mode']; $src = ai_mock() ? 'mock' : (($mode === 'payg' && !is_exempt_user($u)) ? 'wallet' : 'budget');
+    $cost = ai_cost_micro($model, $in, $out); $uid = (int) $u['id']; $mode = feature_cfg('ai')['mode']; $payg = $mode === 'payg' && !is_exempt_user($u); $src = ai_mock() ? 'mock' : ($payg ? 'wallet' : 'budget');
     run('INSERT INTO {ai_usage} (user_id,model,input_tokens,output_tokens,cost_micro,source) VALUES (?,?,?,?,?,?)', [$uid, $model, $in, $out, $cost, $src]);
-    if ($src === 'wallet' && $cost > 0) { wallet_add($uid, -$cost, 'usage', 'AI: ' . $model . ' ' . $in . '+' . $out . ' tokens'); }
+    if ($payg && $cost > 0) { wallet_add($uid, -$cost, 'usage', 'AI: ' . $model . ' ' . $in . '+' . $out . ' tokens'); }
     return $cost;
 }
 

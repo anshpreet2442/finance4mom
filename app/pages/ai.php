@@ -9,27 +9,28 @@ function ai_gate_notice(array $u): string {
     if ($why === '') { $fa = feature_access($u, 'ai'); if (!$fa['ok']) { $why = $fa['reason']; $link = '<a class="btn btn-dark mt-4" href="' . e(url('/plans')) . '">See plans &amp; wallet</a>'; } }
     elseif ($u['role'] === 'admin') { $link = '<a class="btn btn-dark mt-4" href="' . e(url('/admin/ai')) . '">Set it up in Admin → AI agent</a>'; }
     if ($why === '') { return ''; }
-    return '<div class="card mx-auto max-w-xl p-8 text-center"><div class="mx-auto mb-4 grid size-14 place-items-center rounded-3xl bg-soft">' . icon('sparkles', 'size-7') . '</div><h2 class="text-xl font-semibold">AI advisor is not available</h2><p class="mt-2 text-sm text-mute">' . e($why) . '</p>' . $link . '</div>';
+    return '<div class="card mx-auto max-w-xl p-8 text-center"><div class="mx-auto mb-4 grid size-14 place-items-center rounded-3xl bg-soft"><span class="pills-mark" data-pills data-size="40"></span></div><h2 class="text-xl font-semibold">AI advisor is not available</h2><p class="mt-2 text-sm text-mute">' . e($why) . '</p>' . $link . '</div>';
 }
 
 function page_ai(): void {
     $u = require_login(); $s = snap(); $uid = (int) $u['id']; $profile = ai_profile($uid);
     layout_start('AI advisor', 'ai', $s);
     page_header(($profile['agent_name'] ?: 'AI advisor'), 'Blunt, numbers-first advice on your own data. It can propose changes; nothing happens until you press Apply.',
-        btn('Actions &amp; undo', url('/ai/actions'), 'btn btn-sm', 'history') . btn('Settings', url('/ai/settings'), 'btn btn-sm', 'sliders-horizontal'));
+        btn('Actions &amp; undo', url('/ai/actions'), 'btn btn-sm', 'history') . btn('Settings', url('/ai/settings'), 'btn btn-sm', 'sliders-horizontal'), '<span class="pills-mark" data-pills data-size="56" data-label="AI advisor"></span>');
     if ($n = ai_gate_notice($u)) { echo $n; layout_end(); return; }
     ai_ensure_started($uid, $profile); $profile = ai_profile($uid);
     $rows = array_reverse(all('SELECT id,role,content FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT 60', [$uid])); $msgs = [];
     foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $msgs[] = $r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? '')] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? []]; }
     // previews that were already applied / dismissed elsewhere show their real state
     foreach ($msgs as &$m) { foreach ($m['blocks'] ?? [] as &$b) { if (($b['type'] ?? '') === 'preview') { $b['status'] = (string) (val('SELECT status FROM {ai_actions} WHERE id=? AND user_id=?', [$b['action_id'], $uid]) ?? 'dismissed'); } } unset($b); } unset($m);
-    $data = ['messages' => $msgs, 'stage' => $profile['stage'], 'agent' => ['name' => $profile['agent_name'], 'avatar' => ai_avatar_url($profile)], 'endpoints' => ['chat' => url('/ai/chat'), 'act' => url('/ai/act')], 'csrf' => csrf_token(), 'user' => explode(' ', $u['name'])[0],
+    $data = ['messages' => $msgs, 'stage' => $profile['stage'], 'agent' => ['name' => $profile['agent_name'], 'avatar' => ai_avatar_url($profile)], 'endpoints' => ['chat' => url('/ai/chat'), 'act' => url('/ai/act'), 'upload' => url('/ai/upload'), 'shop' => url('/plugins')], 'models' => ai_model_options($u), 'defaultModel' => ai_pick_model($u, ''), 'efforts' => array_keys(ai_efforts_cfg()), 'defaultEffort' => 'Medium',
+        'commands' => array_values(array_map(fn($c) => ['key' => $c['key'], 'name' => $c['name'], 'description' => $c['description']], ai_commands($u))), 'scopes' => array_keys(AI_SCOPES), 'web' => site_setting('ai_web_search', '0') === '1', 'upload' => ai_upload_limits(), 'csrf' => csrf_token(), 'user' => explode(' ', $u['name'])[0],
         'suggestions' => ['How am I doing this month?', 'Where does my money go?', 'Compare old vs new tax regime', 'What would a ₹10 lakh loan at 9% cost me?', 'Which of my goals is behind?', 'Which bills are due?']];
     echo '<section class="card ai-chat" data-ai aria-label="Chat with your advisor"><header class="ai-chat__head">' . ai_avatar_img($profile, 'size-11') . '<div class="min-w-0"><p class="truncate font-semibold" data-ai-name>' . e($profile['agent_name'] ?: 'Your advisor') . '</p><p class="text-xs text-mute" data-ai-sub>'
         . ($profile['stage'] === 'interview' ? 'Getting to know you' : ($profile['stage'] === 'naming' ? 'Waiting for a name' : 'Ready. Ask anything about your money.')) . '</p></div></header>'
         . '<div class="ai-log" data-ai-log role="log" aria-live="polite" aria-relevant="additions"></div>'
         . '<div class="ai-suggest" data-ai-suggest></div>'
-        . '<form class="ai-compose" data-ai-form autocomplete="off"><label for="ai-input" class="sr-only">Message</label><textarea id="ai-input" rows="1" maxlength="2000" placeholder="Ask or answer here" data-ai-input></textarea><button class="btn btn-dark ai-send" aria-label="Send">' . icon('send', 'size-4') . '</button></form></section>';
+        . '<div class="ai-composer" data-ai-composer></div></section>';
     echo '<script src="' . e(asset('ai.js')) . '" defer></script><script type="application/json" id="ai-data">' . json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) . '</script><noscript><p class="mt-4 text-sm text-mute">The advisor needs JavaScript.</p></noscript>';
     echo '<p class="mt-3 text-center text-xs text-mute">General information, not regulated advice. Confirm tax and legal matters with a practising chartered accountant.</p>';
     layout_end();
@@ -95,7 +96,9 @@ function handle_ai_chat(): never {
     [$u, $body] = ai_json_guard(); set_time_limit(150); ignore_user_abort(true);
     while (ob_get_level() > 0) { ob_end_flush(); }
     $emit = function (array $ev) { echo json_encode($ev, JSON_UNESCAPED_UNICODE) . "\n"; echo str_repeat(' ', 0); flush(); };
-    try { ai_turn($u, (string) ($body['message'] ?? ''), $emit); }
+    $o = ['model' => is_string($body['model'] ?? null) ? mb_substr($body['model'], 0, 60) : '', 'effort' => is_string($body['effort'] ?? null) ? mb_substr($body['effort'], 0, 12) : '', 'files' => is_array($body['files'] ?? null) ? array_slice($body['files'], 0, 8) : [],
+        'sources' => is_array($body['sources'] ?? null) ? array_slice(array_filter($body['sources'], 'is_string'), 0, 8) : [], 'web' => !empty($body['web'])];
+    try { ai_turn($u, (string) ($body['message'] ?? ''), $emit, $o); }
     catch (UserError $e) { $emit(['type' => 'error', 'code' => 'error', 'message' => $e->getMessage()]); }
     catch (Throwable $e) { log_error($e); $emit(['type' => 'error', 'code' => 'error', 'message' => 'Something went wrong. Please try again.']); }
     exit;
@@ -108,5 +111,17 @@ function handle_ai_act(): never {
         echo json_encode(['type' => 'ok', 'message' => $msg, 'status' => (string) val('SELECT status FROM {ai_actions} WHERE id=?', [$id])]) . "\n";
     } catch (UserError $e) { echo json_encode(['type' => 'error', 'message' => $e->getMessage(), 'status' => (string) (val('SELECT status FROM {ai_actions} WHERE id=? AND user_id=?', [$id, $uid]) ?? '')]) . "\n"; }
     catch (Throwable $e) { log_error($e); echo json_encode(['type' => 'error', 'message' => 'Something went wrong.']) . "\n"; }
+    exit;
+}
+
+/** POST /ai/upload (multipart): one attachment for the chat. Validated type + size; returns {type:'ok', id, name, mime, size}. */
+function handle_ai_upload(): never {
+    header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store'); $u = current_user();
+    $fail = function (int $code, string $msg) { http_response_code($code); echo json_encode(['type' => 'error', 'message' => $msg]); exit; };
+    if (!$u) { $fail(401, 'Sign in again.'); } start_session(); $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''); if ($sent === '' || !hash_equals($_SESSION['csrf'] ?? '', $sent)) { $fail(403, 'Your page expired. Reload and try again.'); }
+    if (billing_level($u) >= 2) { $fail(403, 'The app is read-only until your dues are paid.'); } session_write_close();
+    if (!feature_on($u, 'ai') || ai_not_ready_reason() !== '') { $fail(403, 'The AI advisor is not available to you right now.'); }
+    if (empty($_FILES['file']) || !is_array($_FILES['file']) || is_array($_FILES['file']['tmp_name'] ?? null)) { $fail(400, 'No file received.'); }
+    try { echo json_encode(['type' => 'ok'] + ai_store_upload($u, $_FILES['file'])); } catch (UserError $e) { $fail(422, $e->getMessage()); } catch (Throwable $e) { log_error($e); $fail(500, 'Could not save the file.'); }
     exit;
 }

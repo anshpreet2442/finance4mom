@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 10;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
@@ -267,6 +267,44 @@ function mfnc_schema(): array {
         user_id INT UNSIGNED NOT NULL, feature VARCHAR(30) NOT NULL, valid_until DATE NOT NULL, source VARCHAR(20) NOT NULL DEFAULT 'admin', PRIMARY KEY (user_id, feature),
         FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
     ) $t",
+    // ---- v9 (builder-A): plugin shop purchases + AI attachments ----
+    'shop_purchases' => "CREATE TABLE IF NOT EXISTS {shop_purchases} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, item_key VARCHAR(40) NOT NULL, title VARCHAR(120) NOT NULL, amount_micro BIGINT NOT NULL DEFAULT 0, days SMALLINT UNSIGNED NULL,
+        method VARCHAR(12) NOT NULL DEFAULT 'wallet', ref VARCHAR(40) NOT NULL, valid_until DATE NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_shop_ref (user_id, ref), INDEX idx_shop_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'ai_uploads' => "CREATE TABLE IF NOT EXISTS {ai_uploads} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, name VARCHAR(120) NOT NULL, mime VARCHAR(60) NOT NULL, size INT UNSIGNED NOT NULL, path VARCHAR(200) NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_aiup_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    // ---- v10 (builder-B): Telegram bot ----
+    'telegram_links' => "CREATE TABLE IF NOT EXISTS {telegram_links} (
+        user_id INT UNSIGNED PRIMARY KEY, chat_id BIGINT NOT NULL, tg_username VARCHAR(64) NULL, first_name VARCHAR(80) NULL, notify TINYINT(1) NOT NULL DEFAULT 0, upsell_at DATETIME NULL,
+        linked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen_at DATETIME NULL, UNIQUE KEY uq_tg_chat (chat_id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'telegram_tokens' => "CREATE TABLE IF NOT EXISTS {telegram_tokens} (
+        token_hash CHAR(64) PRIMARY KEY, user_id INT UNSIGNED NOT NULL, expires_at DATETIME NOT NULL, used_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tgt_user (user_id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'telegram_updates' => "CREATE TABLE IF NOT EXISTS {telegram_updates} (update_id BIGINT PRIMARY KEY, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_tgu_time (created_at)) $t",
+    'telegram_log' => "CREATE TABLE IF NOT EXISTS {telegram_log} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, direction ENUM('in','out') NOT NULL, chat_id BIGINT NULL, user_id INT UNSIGNED NULL, kind VARCHAR(40) NOT NULL DEFAULT '', status ENUM('ok','failed','skipped') NOT NULL DEFAULT 'ok',
+        detail VARCHAR(300) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_tgl_time (created_at), INDEX idx_tgl_chat (chat_id, direction, kind, created_at)
+    ) $t",
+    'telegram_pending' => "CREATE TABLE IF NOT EXISTS {telegram_pending} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, chat_id BIGINT NOT NULL, kind VARCHAR(16) NOT NULL, payload TEXT NULL, status ENUM('open','done','cancelled') NOT NULL DEFAULT 'open',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_tgp_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'telegram_memory' => "CREATE TABLE IF NOT EXISTS {telegram_memory} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, role ENUM('user','assistant') NOT NULL, content TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tgm_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'telegram_summary' => "CREATE TABLE IF NOT EXISTS {telegram_summary} (
+        user_id INT UNSIGNED PRIMARY KEY, summary TEXT NOT NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'telegram_sent' => "CREATE TABLE IF NOT EXISTS {telegram_sent} (
+        user_id INT UNSIGNED NOT NULL, dedupe_key VARCHAR(80) NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, dedupe_key), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
     ];
 }
 
@@ -299,13 +337,14 @@ function mfnc_migrate(): void {
         ['purchases', 'account_id', 'INT UNSIGNED NULL'],
         ['preferences', 'phone', 'VARCHAR(20) NULL'], ['preferences', 'email_alerts', 'TINYINT(1) NOT NULL DEFAULT 1'], ['preferences', 'sms_alerts', 'TINYINT(1) NOT NULL DEFAULT 0'],
         ['users', 'ai_budget_micro', 'BIGINT NULL'],
-        ['charges', 'feature', 'VARCHAR(30) NULL'], ['charges', 'feature_days', 'SMALLINT UNSIGNED NULL'], ['charges', 'topup_micro', 'BIGINT NULL'],
+        ['charges', 'feature', 'VARCHAR(30) NULL'], ['charges', 'buy_key', 'VARCHAR(40) NULL'], ['charges', 'feature_days', 'SMALLINT UNSIGNED NULL'], ['charges', 'topup_micro', 'BIGINT NULL'],
     ];
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }
     $defaults = ['billing_enabled' => '1', 'grace_days' => '5', 'late_fee_type' => 'none', 'late_fee_flat' => '0', 'late_fee_percent' => '0', 'restrict_after_days' => '14', 'lock_after_days' => '30'];
     foreach ($defaults as $k => $v) { run('INSERT IGNORE INTO {settings} (k, v) VALUES (?, ?)', [$k, $v]); }
     if (column_exists('entitlements', 'until')) { db()->exec(sqlt('ALTER TABLE {entitlements} CHANGE `until` valid_until DATE NOT NULL')); } // early v6 builds used a reserved-looking name
     db()->exec(sqlt("ALTER TABLE {ai_actions} MODIFY status ENUM('proposed','applied','undone','failed','dismissed') NOT NULL DEFAULT 'proposed'")); // v7: previews and dismissals
+    db()->exec(sqlt("ALTER TABLE {wallet_ledger} MODIFY kind ENUM('topup','usage','adjust','purchase') NOT NULL")); // v9: shop purchases
     mfnc_fix_collations();
 }
 

@@ -131,3 +131,9 @@
 
 /* never scroll the page sideways (clip, unlike hidden, keeps sticky headers working) */
 html, body { overflow-x: clip; }
+/* round 2 (builder-A): PromptBar composer + live steps in the AI chat */
+.ai-composer { padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card); }
+.ai-attached { margin-top: .25rem; font-size: .75rem; color: var(--mute); }
+.ai-stopped { margin-top: .4rem; font-size: .8rem; color: var(--mute); font-style: italic; }
+.ai-steps-done { margin-bottom: .5rem; font-size: .8rem; color: var(--mute); } .ai-steps-done > summary { cursor: pointer; min-height: 28px; display: flex; align-items: center; } .ai-steps-done[open] > summary { margin-bottom: .4rem; }
+.ai-msg__b > .ai-status { display: block; }

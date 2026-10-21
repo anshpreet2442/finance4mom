@@ -38,11 +38,13 @@ const FEATURES = [
     'ai' => ['label' => 'AI finance advisor', 'desc' => 'A blunt personal finance / CA advisor that reads your data and can act with undo.', 'modes' => ['free', 'paid', 'payg']],
     'email' => ['label' => 'Email alerts', 'desc' => 'Receipts and reminders by email.', 'modes' => ['free', 'paid', 'payg']],
     'sms' => ['label' => 'SMS alerts', 'desc' => 'Payment links and alerts by text message.', 'modes' => ['free', 'paid', 'payg']],
+    'telegram' => ['label' => 'Telegram bot', 'desc' => 'Check balances, bills and goals, log expenses and get reminders in Telegram.', 'modes' => ['free', 'paid'], 'default' => 'free'],
+    'telegram_ai' => ['label' => 'Telegram AI plugin', 'desc' => 'Chat with your AI advisor in Telegram: charts, buttons, receipts and actions you can undo.', 'modes' => ['free', 'paid', 'payg'], 'default' => 'paid', 'price' => 9900, 'metered' => true],
 ];
 function feature_cfg(string $f): array {
-    $d = ['dock' => 'free', 'ai' => 'free', 'email' => 'free', 'sms' => 'free'][$f] ?? 'free';
-    $mode = site_setting("feat_{$f}_mode", $d); if (!in_array($mode, FEATURES[$f]['modes'] ?? ['free'], true)) { $mode = 'free'; }
-    return ['mode' => $mode, 'price' => max(0, (int) site_setting("feat_{$f}_price", '0')), 'days' => max(1, (int) site_setting("feat_{$f}_days", '30')), 'unit_micro' => max(0, (int) site_setting("feat_{$f}_unit", '0'))];
+    $d = features()[$f]['default'] ?? 'free';
+    $mode = site_setting("feat_{$f}_mode", $d); if (!in_array($mode, features()[$f]['modes'] ?? ['free'], true)) { $mode = 'free'; }
+    return ['mode' => $mode, 'price' => max(0, (int) site_setting("feat_{$f}_price", (string) (features()[$f]['price'] ?? 0))), 'days' => max(1, (int) site_setting("feat_{$f}_days", '30')), 'unit_micro' => max(0, (int) site_setting("feat_{$f}_unit", '0'))];
 }
 function is_exempt_user(?array $u): bool { return $u && $u['role'] === 'admin'; }
 function entitlement_until(int $uid, string $f): ?string { $v = val('SELECT valid_until FROM {entitlements} WHERE user_id=? AND feature=?', [$uid, $f]); return $v ? (string) $v : null; }
@@ -59,10 +61,10 @@ function feature_access(?array $u, string $f): array {
     if (is_exempt_user($u) || $m === 'free') { return $ok; }
     if ($m === 'paid') {
         $until = entitlement_until((int) $u['id'], $f);
-        return $until && $until >= today() ? $ok : ['ok' => false, 'reason' => FEATURES[$f]['label'] . ' is part of a paid plan. Get access on the Plans page.', 'mode' => $m, 'code' => 'plan'];
+        return $until && $until >= today() ? $ok : ['ok' => false, 'reason' => features()[$f]['label'] . ' is part of a paid plan. Get access on the Plans page.', 'mode' => $m, 'code' => 'plan'];
     }
     $need = max($c['unit_micro'], 1);
-    return wallet_balance((int) $u['id']) >= $need ? $ok : ['ok' => false, 'reason' => 'Your wallet is empty. Top it up on the Plans page to keep using ' . FEATURES[$f]['label'] . '.', 'mode' => $m, 'code' => 'wallet'];
+    return wallet_balance((int) $u['id']) >= $need ? $ok : ['ok' => false, 'reason' => 'Your wallet is empty. Top it up on the Plans page to keep using ' . features()[$f]['label'] . '.', 'mode' => $m, 'code' => 'wallet'];
 }
 function feature_on(?array $u, string $f): bool { return feature_access($u, $f)['ok']; }
 
@@ -76,8 +78,11 @@ function wallet_add(int $uid, int $micro, string $kind, string $note = '', ?stri
 /** Called when a charge is paid (gateway or manual): grants a purchased plan or credits a wallet top-up. Idempotent. */
 function apply_charge_effects(array $c): void {
     $uid = (int) $c['user_id'];
-    if (!empty($c['feature']) && isset(FEATURES[$c['feature']])) { if (!(int) val('SELECT COUNT(*) FROM {wallet_ledger} WHERE user_id=? AND ref=?', [$uid, 'plan:' . $c['id']])) { grant_feature($uid, $c['feature'], max(1, (int) ($c['feature_days'] ?: 30)), 'purchase'); wallet_add($uid, 0, 'adjust', 'Plan purchased: ' . $c['title'], 'plan:' . $c['id']); } }
-    if (!empty($c['topup_micro'])) { wallet_add($uid, (int) $c['topup_micro'], 'topup', 'Top-up', 'charge:' . $c['id']); }
+    if (!empty($c['feature']) && isset(features()[$c['feature']])) { if (!(int) val('SELECT COUNT(*) FROM {wallet_ledger} WHERE user_id=? AND ref=?', [$uid, 'plan:' . $c['id']])) { grant_feature($uid, $c['feature'], max(1, (int) ($c['feature_days'] ?: 30)), 'purchase'); wallet_add($uid, 0, 'adjust', 'Plan purchased: ' . $c['title'], 'plan:' . $c['id']); shop_record_charge($c); } }
+    if (!empty($c['topup_micro'])) {
+        $fresh = wallet_add($uid, (int) $c['topup_micro'], 'topup', 'Top-up', 'charge:' . $c['id']);
+        if ($fresh && !empty($c['buy_key'])) { shop_complete_after_topup($uid, (string) $c['buy_key'], (int) $c['id']); } elseif ($fresh && str_starts_with((string) $c['description'], 'AI usage pack')) { shop_record_charge($c); }
+    }
 }
 /** The user starts a purchase: a normal charge they pay through the existing gateway flow. Returns the charge id. */
 function create_self_charge(int $uid, string $title, int $amountPaise, array $extra): int {
@@ -92,9 +97,9 @@ function create_self_charge(int $uid, string $title, int $amountPaise, array $ex
 function dock_pages(bool $admin = false): array {
     $p = ['dashboard' => ['Dashboard', '/', 'layout-dashboard'], 'accounts' => ['Accounts', '/accounts', 'landmark'], 'transactions' => ['Transactions', '/transactions', 'arrow-left-right'], 'budget' => ['Budget', '/budget', 'calendar-check'],
         'goals' => ['Goals', '/goals', 'goal'], 'house' => ['House', '/house', 'house'], 'big' => ['Big purchases', '/big-purchases', 'shopping-cart'], 'bills' => ['Bills', '/bills', 'bell-ring'], 'yearly' => ['Yearly', '/yearly', 'calendar-clock'],
-        'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'sparkles'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
+        'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'pills'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
     $ai = site_setting('ai_enabled', '0') === '1' || $admin; if (!$ai) { unset($p['ai']); }
-    $paidAny = false; foreach (array_keys(FEATURES) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $paidAny = true; } } if (!$paidAny) { unset($p['plans']); }
+    $paidAny = false; foreach (array_keys(features()) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $paidAny = true; } } if (!$paidAny) { unset($p['plans']); }
     if ($admin) { $p['admin'] = ['Admin', '/admin', 'shield-check']; }
     return $p;
 }

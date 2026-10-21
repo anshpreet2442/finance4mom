@@ -80,16 +80,16 @@
   };
 
   function init(root) {
-    if (!root || root._ai) return; root._ai = true; var data = JSON.parse(d.getElementById('ai-data').textContent), log = root.querySelector('[data-ai-log]'), form = root.querySelector('[data-ai-form]'), input = root.querySelector('[data-ai-input]'), sug = root.querySelector('[data-ai-suggest]');
-    var base = d.body.getAttribute('data-base') || '', busy = false, stage = data.stage;
+    if (!root || root._ai) return; root._ai = true; var data = JSON.parse(d.getElementById('ai-data').textContent), log = root.querySelector('[data-ai-log]'), mount = root.querySelector('[data-ai-composer]'), sug = root.querySelector('[data-ai-suggest]'), bar = null, ctrl = null;
+    var base = d.body.getAttribute('data-base') || '', busy = false, stage = data.stage, w = window;
     function csrf() { return d.body.getAttribute('data-csrf') || data.csrf; }
-    function post(url, body, onEv) {
-      return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() }, body: JSON.stringify(body) }).then(function (r) {
+    function post(url, body, onEv, signal) {
+      return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() }, body: JSON.stringify(body), signal: signal }).then(function (r) {
         if (!r.body || !r.body.getReader) return r.text().then(function (t) { var last = null; t.split('\n').forEach(function (l) { if (l.trim()) { last = JSON.parse(l); if (onEv) onEv(last); } }); return last; });
         var rd = r.body.getReader(), dec = new TextDecoder(), buf = '', last = null;
         function pump() { return rd.read().then(function (x) { if (x.done) { if (buf.trim()) { last = JSON.parse(buf); if (onEv) onEv(last); } return last; } buf += dec.decode(x.value, { stream: true }); var i; while ((i = buf.indexOf('\n')) >= 0) { var ln = buf.slice(0, i); buf = buf.slice(i + 1); if (ln.trim()) { last = JSON.parse(ln); if (onEv) onEv(last); } } return pump(); }); }
         return pump();
-      }).catch(function () { var e = { type: 'error', message: 'Could not reach the server. Check your connection.' }; if (onEv) onEv(e); return e; });
+      }).catch(function (err) { if (err && err.name === 'AbortError') { var a = { type: 'aborted' }; if (onEv) onEv(a); return a; } var e = { type: 'error', message: 'Could not reach the server. Check your connection.' }; if (onEv) onEv(e); return e; });
     }
     var ctx = { act: data.endpoints.act, base: base, post: post, send: function (t) { send(t); } };
     function scroll() { log.scrollTop = log.scrollHeight; }
@@ -101,17 +101,65 @@
     trimOldPrompts(); scroll();
     function suggestions() { sug.textContent = ''; if (stage !== 'ready' || log.querySelectorAll('.ai-msg--user').length > 2) return; data.suggestions.slice(0, 5).forEach(function (t) { var c = el('button', 'chip', t); c.type = 'button'; c.onclick = function () { send(t); }; sug.appendChild(c); }); }
     suggestions();
-    function send(text) {  // eslint-disable-line
-      text = (text || '').trim(); if (!text || busy) return; busy = true; sug.textContent = ''; input.value = ''; input.style.height = ''; form.querySelector('button').disabled = true; bubble('user').appendChild(el('p', '', text)); scroll();
-      var body = bubble('assistant'), status = el('div', 'ai-status'); status.setAttribute('role', 'status'); status.appendChild(el('span', 'ai-dots')); var st = el('span', '', 'Thinking…'); status.appendChild(st); body.appendChild(status); scroll();
-      post(data.endpoints.chat, { message: text }, function (ev) {
-        if (ev.type === 'status') st.textContent = ev.text; else if (ev.type === 'block') { renderBlock(body, ev.block); body.appendChild(status); scroll(); } else if (ev.type === 'stage') { stage = ev.stage; if (ev.name) { root.querySelector('[data-ai-name]').textContent = ev.name; data.agent.name = ev.name; if (ev.avatar) { data.agent.avatar = ev.avatar; root.querySelectorAll('.ai-chat__head .ai-avatar').forEach(function (a) { a.src = ev.avatar; }); } } if (stage === 'ready') root.querySelector('[data-ai-sub]').textContent = 'Ready. Ask anything about your money.'; }
-        else if (ev.type === 'error') { var c = el('div', 'ai-callout ai-callout--bad'); c.appendChild(el('p', '', ev.message)); if (ev.code === 'wallet' || ev.code === 'plan' || ev.code === 'budget') { var a = el('a', 'btn btn-sm', 'Plans & wallet'); a.href = base + '/plans'; c.appendChild(a); } body.appendChild(c); }
-      }).then(function () { status.remove(); if (!body.childNodes.length) body.closest('.ai-msg').remove(); busy = false; form.querySelector('button').disabled = false; trimOldPrompts(); suggestions(); scroll(); input.focus(); });
+    var SOURCE_NAMES = { web: 'Web search', accounts: 'Accounts', transactions: 'Transactions', bills: 'Bills', goals: 'Goals', budgets: 'Budgets' };
+    function ls(k, v) { try { if (v === undefined) return w.localStorage.getItem('mf.ai.' + k); w.localStorage.setItem('mf.ai.' + k, v); } catch (e) { } return null; }
+    function nav(href) { var a = d.createElement('a'); a.href = href; if (w.MfncSpa && MfncSpa.go) MfncSpa.go(href); else w.location.href = href; }
+    function pickFiles() {
+      var fi = d.createElement('input'); fi.type = 'file'; fi.multiple = true; fi.accept = data.upload.accept;
+      fi.onchange = function () {
+        var files = Array.prototype.slice.call(fi.files || []), have = bar.getState().attachments.length;
+        files.forEach(function (f) {
+          if (have >= data.upload.max_files) { bar.setNotice('You can attach up to ' + data.upload.max_files + ' files per message.'); return; }
+          if (f.size > data.upload.max_bytes) { bar.setNotice(f.name + ' is too big (limit ' + Math.round(data.upload.max_bytes / 1048576) + ' MB).'); return; } have++;
+          var h = bar.addAttachment({ name: f.name, status: 'uploading' }), fd = new FormData(); fd.append('file', f);
+          fetch(data.endpoints.upload, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf() }, body: fd }).then(function (r) { return r.json().catch(function () { return { type: 'error', message: 'Upload failed.' }; }); })
+            .then(function (j) { if (j.type === 'ok') { h.update({ id: j.id, name: j.name, status: 'ready' }); bar.setNotice(''); } else { bar.setNotice(j.message || 'Upload failed.'); h.remove(); } })
+            .catch(function () { bar.setNotice('Upload failed. Check your connection.'); h.remove(); });
+        });
+      };
+      fi.click();
     }
-    form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); } });
-    input.addEventListener('input', function () { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });
+    var SR = w.SpeechRecognition || w.webkitSpeechRecognition, rec = null;
+    function dictate() {
+      return new Promise(function (res, rej) {
+        try { rec = new SR(); rec.lang = d.documentElement.lang === 'en' ? (navigator.language || 'en-IN') : d.documentElement.lang; rec.interimResults = false; rec.maxAlternatives = 1; rec.continuous = false; var got = ''; rec.onresult = function (e) { got = e.results[0][0].transcript; }; rec.onerror = function () { rej(); }; rec.onend = function () { res(got); }; rec.start(); } catch (e) { rej(e); }
+      });
+    }
+    function buildBar() {
+      if (!mount || !w.PromptBar) return; var src = [{ key: 'files', name: 'Photos & files', description: 'Upload from this device', icon: 'clip', attach: true }];
+      if (data.web) src.push({ key: 'web', name: SOURCE_NAMES.web, description: 'Live results', icon: 'globe' });
+      data.scopes.forEach(function (k) { src.push({ key: k, name: SOURCE_NAMES[k], description: 'Focus on my ' + SOURCE_NAMES[k].toLowerCase(), icon: 'data' }); });
+      var models = data.models, def = ls('model') && models.some(function (m) { return m.key === ls('model') && !m.locked; }) ? ls('model') : data.defaultModel, eff = ls('effort') && data.efforts.indexOf(ls('effort')) >= 0 ? ls('effort') : data.defaultEffort;
+      bar = PromptBar.create({ placeholder: stage === 'ready' ? 'Ask anything about your money' : 'Type your answer', sources: src, commands: data.commands, models: models, defaultModel: def, efforts: data.efforts, defaultEffort: eff, className: 'prompt-bar--app',
+        onEffortChange: function (e) { ls('effort', e); }, onModelChange: function (k) { ls('model', k); }, onNavigate: nav, onLocked: function () { nav(data.endpoints.shop); }, onSend: function (t, o) { send(t, o); }, onStop: stop, onAttach: pickFiles,
+        onDictate: SR ? dictate : null, onDictateCancel: function () { try { rec && rec.abort(); } catch (e) { } }, maxRows: 5 });
+      bar.setModels(models, { name: 'Get in Plugins', href: data.endpoints.shop, description: 'Premium models' });
+      mount.appendChild(bar.el);
+    }
+    function stop() { if (ctrl) ctrl.abort(); }
+    function parseSources(text) {
+      var low = text.toLowerCase(), scopes = [], web = low.indexOf('@web search') >= 0; data.scopes.forEach(function (k) { if (low.indexOf('@' + SOURCE_NAMES[k].toLowerCase()) >= 0) scopes.push(k); }); return { web: web, sources: scopes };
+    }
+    function send(text, o) {
+      text = (text || '').trim(); o = o || (bar ? { attachments: bar.getState().attachments, model: bar.getState().model, effort: bar.getState().effort } : {});
+      var files = (o.attachments || []).filter(function (a) { return a.id; }); if ((!text && !files.length) || busy) return; busy = true; sug.textContent = ''; if (bar) bar.setBusy(true);
+      var shown = text || 'Please look at the attached file.'; var u = bubble('user'); u.appendChild(el('p', '', shown)); if (files.length) u.appendChild(el('p', 'ai-attached', 'Attached: ' + files.map(function (f) { return f.name; }).join(', '))); scroll();
+      var body = bubble('assistant'), box = el('div', 'ai-status'), steps = el('ul', 'status-steps status-steps--chat'), list = w.StatusMark ? StatusMark.list(steps) : null; box.setAttribute('role', 'status'); box.appendChild(steps); var st = el('span', 'ai-status__t sr-only', 'Thinking…'); box.appendChild(st); body.appendChild(box); scroll();
+      ctrl = w.AbortController ? new AbortController() : null; var ps = parseSources(shown), stopped = false;
+      post(data.endpoints.chat, { message: text, model: o.model && o.model.key, effort: o.effort, files: files.map(function (f) { return f.id; }), sources: ps.sources, web: ps.web }, function (ev) {
+        if (ev.type === 'status') st.textContent = ev.text;
+        else if (ev.type === 'step' && list) { list.set(ev); scroll(); }
+        else if (ev.type === 'block') { renderBlock(body, ev.block); body.appendChild(box); scroll(); }
+        else if (ev.type === 'stage') { stage = ev.stage; if (ev.name) { root.querySelector('[data-ai-name]').textContent = ev.name; data.agent.name = ev.name; if (ev.avatar) { data.agent.avatar = ev.avatar; root.querySelectorAll('.ai-chat__head .ai-avatar').forEach(function (a) { a.src = ev.avatar; }); } } if (stage === 'ready') { root.querySelector('[data-ai-sub]').textContent = 'Ready. Ask anything about your money.'; if (bar) bar.configure({ placeholder: 'Ask anything about your money' }); } }
+        else if (ev.type === 'aborted' || ev.type === 'cancelled') { stopped = true; }
+        else if (ev.type === 'error') { var c = el('div', 'ai-callout ai-callout--bad'); c.appendChild(el('p', '', ev.message)); if (ev.code === 'wallet' || ev.code === 'plan' || ev.code === 'budget') { var a = el('a', 'btn btn-sm', 'Plans & wallet'); a.href = base + '/plans'; c.appendChild(a); } else if (ev.code === 'model_locked' || ev.code === 'model') { var a2 = el('a', 'btn btn-sm', 'Get in Plugins'); a2.href = base + '/plugins'; c.appendChild(a2); } body.appendChild(c); }
+      }, ctrl && ctrl.signal).then(function () {
+        if (list) list.cancelRunning(); if (stopped) { var n = el('p', 'ai-stopped', 'Stopped.'); body.appendChild(n); }
+        var n2 = steps.children.length; if (n2) { var dt = el('details', 'ai-steps-done'); dt.appendChild(el('summary', '', n2 + (n2 === 1 ? ' step' : ' steps'))); dt.appendChild(steps); box.replaceWith(dt); body.insertBefore(dt, body.firstChild); } else box.remove();
+        if (!body.childNodes.length) body.closest('.ai-msg').remove(); busy = false; ctrl = null; if (bar) { bar.setBusy(false); bar.focus(); } trimOldPrompts(); suggestions(); scroll();
+      });
+    }
+    buildBar();
   }
   function boot() { init(d.querySelector('[data-ai]')); }
   if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot); else boot(); d.addEventListener('mfnc:page', boot);
