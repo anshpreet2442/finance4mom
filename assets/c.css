@@ -1,0 +1,4 @@
+/* Builder-C styles: share links, PDF, voice, AI layout. Uses the app's tokens (var(--...)) so light and dark both work. */
+.share-qr{background:#fff;border-radius:18px;padding:8px;line-height:0;border:1px solid var(--line,#e4dfd3)}
+.share-qr img{display:block;width:132px;height:132px}
+.share-url{max-width:100%}

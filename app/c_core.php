@@ -5,7 +5,7 @@ declare(strict_types=1);
  * JSON endpoints (c_route, called once from index.php), small helpers and a tiny rate limiter.
  * Features living on top: AI Layout (layout.php, layout_ai.php), voice (voice.php), PDF export (pdf.php), share links (share.php, qr.php), payment page (paypage.php).
  */
-const C_SCHEMA_VERSION = 3;
+const C_SCHEMA_VERSION = 4;
 // the feature files (loaded here so bootstrap.php and the test runner only need to know about c_core)
 foreach (['qr', 'share', 'pdf', 'voice', 'layout', 'layout_ai', 'paypage'] as $__f) { if (is_file(__DIR__ . "/$__f.php")) { require_once __DIR__ . "/$__f.php"; } }
 unset($__f);
@@ -17,10 +17,10 @@ function c_schema(): array {
         PRIMARY KEY (user_id, device), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
     'c_layout_backups' => "CREATE TABLE IF NOT EXISTS {c_layout_backups} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, device ENUM('desktop','mobile') NOT NULL, label VARCHAR(100) NOT NULL DEFAULT '', source VARCHAR(20) NOT NULL DEFAULT 'auto',
         data MEDIUMTEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_lb (user_id, device, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
-    'c_layout_drafts' => "CREATE TABLE IF NOT EXISTS {c_layout_drafts} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, device ENUM('desktop','mobile') NOT NULL, cur MEDIUMTEXT NOT NULL, undo MEDIUMTEXT NOT NULL, redo MEDIUMTEXT NOT NULL,
+    'c_layout_drafts' => "CREATE TABLE IF NOT EXISTS {c_layout_drafts} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, device ENUM('desktop','mobile') NOT NULL, cur MEDIUMTEXT NOT NULL, hist_undo MEDIUMTEXT NOT NULL, hist_redo MEDIUMTEXT NOT NULL,
         brief TEXT NULL, snap MEDIUMTEXT NULL, msgs MEDIUMTEXT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX idx_ld (user_id, id),
         FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
-    'c_share_links' => "CREATE TABLE IF NOT EXISTS {c_share_links} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, token_hash CHAR(64) NOT NULL, token_hint VARCHAR(8) NOT NULL DEFAULT '', title VARCHAR(80) NOT NULL, message VARCHAR(400) NOT NULL DEFAULT '',
+    'c_share_links' => "CREATE TABLE IF NOT EXISTS {c_share_links} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, token_hash CHAR(64) NOT NULL, token_hint VARCHAR(8) NOT NULL DEFAULT '', token_enc VARCHAR(255) NOT NULL DEFAULT '', title VARCHAR(80) NOT NULL, message VARCHAR(400) NOT NULL DEFAULT '',
         widgets VARCHAR(400) NOT NULL DEFAULT '', mask TINYINT(1) NOT NULL DEFAULT 1, password_hash VARCHAR(255) NULL, expires_at DATETIME NULL, max_views INT UNSIGNED NULL, views INT UNSIGNED NOT NULL DEFAULT 0, last_viewed_at DATETIME NULL,
         status ENUM('active','paused','revoked') NOT NULL DEFAULT 'active', style VARCHAR(12) NOT NULL DEFAULT 'tube', color VARCHAR(7) NOT NULL DEFAULT '#0b3d2e', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_token (token_hash), INDEX idx_sl (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
@@ -37,11 +37,16 @@ function c_schema(): array {
 function c_install(): void {
     try { $v = val('SELECT v FROM {meta} WHERE k = ?', ['schema_c']); if ($v !== null && (int) $v >= C_SCHEMA_VERSION) { return; } } catch (PDOException $e) { if ($e->getCode() !== '42S02') { throw $e; } return; }
     foreach (c_schema() as $sql) { db()->exec(sqlt($sql)); }
+    if (!column_exists('c_share_links', 'token_enc')) { db()->exec(sqlt("ALTER TABLE {c_share_links} ADD COLUMN token_enc VARCHAR(255) NOT NULL DEFAULT '' AFTER token_hint")); }
     try { db()->exec(sqlt("ALTER TABLE {c_voice_requests} MODIFY ref VARCHAR(60) NOT NULL DEFAULT ''")); } catch (PDOException) {}
     run('INSERT INTO {meta} (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', ['schema_c', (string) C_SCHEMA_VERSION]);
 }
 
 // ============================ helpers ============================
+/** header()/status that stay quiet when output already started (tests, CLI) and remember the last status for tests. */
+function c_hdr(string $h): void { if (!headers_sent()) { header($h); } }
+function c_session_close(): void { if (PHP_SAPI !== 'cli') { session_write_close(); } }
+function c_status(int $code): void { $GLOBALS['__c_status'] = $code; if (!headers_sent()) { http_response_code($code); } }
 function c_json(array $data, int $code = 200): never { http_response_code($code); header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store'); echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION); exit; }
 /** Signed-in, CSRF-checked JSON request. Returns [$user, $body]. Exits with a JSON error otherwise. */
 function c_json_guard(bool $stream = false, int $maxBody = 60000): array {
@@ -50,7 +55,7 @@ function c_json_guard(bool $stream = false, int $maxBody = 60000): array {
     start_session(); $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''); if ($sent === '' || !hash_equals($_SESSION['csrf'] ?? '', $sent)) { $fail(403, 'Your page expired. Reload and try again.'); }
     if (billing_level($u) >= 2) { $fail(403, 'The app is read-only until your dues are paid.'); }
     $body = json_decode((string) file_get_contents('php://input', false, null, 0, $maxBody), true); if (!is_array($body)) { $body = []; }
-    session_write_close(); header('Cache-Control: no-store');
+    c_session_close(); header('Cache-Control: no-store');
     if ($stream) { header('Content-Type: application/x-ndjson; charset=utf-8'); header('X-Accel-Buffering: no'); }
     return [$u, $body];
 }

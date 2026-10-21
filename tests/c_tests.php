@@ -1,0 +1,61 @@
+<?php
+/* Builder-C tests (H1 AI layout, H2 voice, H3 PDF, H4 share links + QR, H5 payment page). Included by run.php and tests/c_run.php; uses their helpers. */
+$CU = fn(string $email, string $name = 'Tester') => create_user($email, $name, 'password-12345');
+$CS = sys_get_temp_dir() . '/mfnc-c-tests'; @mkdir($CS, 0777, true);
+function c_py_decode(string $png): ?string { // optional: decode with python (pyzbar or opencv) when present
+    $f = tempnam(sys_get_temp_dir(), 'qr') . '.png'; file_put_contents($f, $png);
+    $py = 'import sys\nfrom PIL import Image, ImageOps\ntry:\n    from pyzbar import pyzbar\n    r=pyzbar.decode(ImageOps.expand(Image.open(sys.argv[1]).convert("L"),border=20,fill=255)); print(r[0].data.decode() if r else "")\nexcept ImportError:\n    import cv2\n    print(cv2.QRCodeDetector().detectAndDecode(cv2.copyMakeBorder(cv2.imread(sys.argv[1]),40,40,40,40,cv2.BORDER_CONSTANT,value=(255,255,255)))[0])';
+    $out = @shell_exec('python3 -I -c ' . escapeshellarg(str_replace('\n', "\n", $py)) . ' ' . escapeshellarg($f) . ' 2>/dev/null'); @unlink($f); return $out === null ? null : trim($out);
+}
+
+section('QR: encoder');
+$m = qr_matrix('A', 'M'); eq(count($m), 21, 'a short text is version 1 (21 modules)'); eq(qr_version_of($m), 1, 'version helper');
+eq(sha1(implode("\n", array_map(fn($r) => implode('', array_map(fn($b) => $b ? '1' : '0', $r)), $m)) . "\n"), 'da8c646840e2069ef5dd952189b12beb08280515', 'matrix for "A" (M) matches the decoded reference');
+$ok = true; foreach ([[7, 1], [10, 2], [15, 3]] as [$n, $v]) { $mm = qr_matrix(str_repeat('a', $n * 10), 'M'); $ok = $ok && count($mm) === 17 + 4 * qr_version_of($mm); } check('size is 17+4*version', $ok);
+$url = 'https://finance.example.com/s/Zk3a9QpW2mXvT7bNcR4hLg'; foreach (['M', 'Q'] as $ec) { $mm = qr_matrix($url, $ec); check("link fits a small QR at level $ec (v" . qr_version_of($mm) . ')', qr_version_of($mm) <= 5); }
+$mq = qr_matrix($url, 'Q'); check('Q is not smaller than M', qr_version_of($mq) >= qr_version_of(qr_matrix($url, 'M')));
+throws(fn() => qr_matrix(str_repeat('x', 5000), 'H'), 'too much', 'text that cannot fit is refused'); throws(fn() => qr_matrix('x', 'Z'), 'level', 'unknown level is refused');
+$finder = true; foreach ([[0, 0], [count($mq) - 7, 0], [0, count($mq) - 7]] as [$fx, $fy]) { $finder = $finder && $mq[$fy][$fx] && $mq[$fy + 3][$fx + 3] && !$mq[$fy + 1][$fx + 1] && $mq[$fy + 6][$fx + 6]; } check('three finder patterns are in place', $finder);
+$timing = true; for ($i = 8; $i < count($mq) - 8; $i++) { $timing = $timing && $mq[6][$i] === ($i % 2 === 0) && $mq[$i][6] === ($i % 2 === 0); } check('timing patterns alternate', $timing);
+$svg = qr_svg($mq, ['fg' => '#0b3d2e', 'style' => 'tube']); check('tube SVG is valid XML with a path', str_starts_with($svg, '<svg') && @simplexml_load_string($svg) !== false && str_contains($svg, '<path')); check('SVG keeps the quiet zone', str_contains($svg, 'viewBox="0 0 ' . (count($mq) + 8) . ' ' . (count($mq) + 8) . '"'));
+check('SVG colour is configurable and sanitised', str_contains(qr_svg($mq, ['fg' => '#aa0000']), '#aa0000') && !str_contains(qr_svg($mq, ['fg' => 'red" onload="x']), 'onload'));
+$png = qr_png($mq, ['size' => 500, 'style' => 'tube']); check('PNG is a real PNG of the requested size', str_starts_with($png, "\x89PNG") && getimagesizefromstring($png)[0] === 500);
+$dec = c_py_decode($png); if ($dec === null || $dec === '') { check('decode check skipped (no python QR decoder installed)', true); } else { eq($dec, $url, 'a QR decoder reads the tube-style PNG back to the exact link'); }
+foreach (['dots', 'square'] as $st) { $d2 = c_py_decode(qr_png(qr_matrix('hello ' . $st, 'M'), ['style' => $st, 'size' => 500])); if ($d2) { eq($d2, 'hello ' . $st, "$st style decodes"); } }
+
+section('Share links: lifecycle');
+$own = $CU('share-owner@x.test', 'Owner Person'); $friend = $CU('share-other@x.test'); load_demo_data($own);
+set_setting('feat_share_links_mode', 'paid'); $uo = one('SELECT * FROM {users} WHERE id=?', [$own]);
+check('a free-plan user is locked out of share links', !feature_access($uo, 'share_links')['ok']); throws(fn() => (function () use ($uo) { $_POST = ['title' => 'T', 'widgets' => ['summary']]; do_share_create($uo); })(), 'paid plan', 'creating a link is gated server-side');
+grant_feature($own, 'share_links', 30, 'admin'); check('after buying it the gate opens', feature_access($uo, 'share_links')['ok']);
+$l = share_create($own, ['title' => 'Our money', 'message' => 'Hi family', 'widgets' => ['summary', 'goals', 'spending', 'trend', 'bills', 'balance', 'budget'], 'mask' => true]);
+check('token has at least 128 bits (>= 22 url-safe chars)', strlen($l['token']) >= 22 && preg_match('/^[A-Za-z0-9_-]+$/', $l['token']) === 1); check('url points at /s/<token>', str_ends_with($l['url'], '/s/' . $l['token']));
+$row = one('SELECT * FROM {c_share_links} WHERE id=?', [$l['id']]); check('only the hash is a lookup key, the token is not stored in clear', $row['token_hash'] === hash('sha256', $l['token']) && !str_contains(json_encode($row), $l['token']));
+eq(share_token_of($row), $l['token'], 'the owner can read the token back (stored encrypted)'); eq((int) share_find($l['token'])['id'], $l['id'], 'lookup by token finds the link'); eq(share_find($l['token'] . 'x'), null, 'a wrong token finds nothing'); eq(share_find('short'), null, 'a malformed token finds nothing');
+eq(share_state($row), 'active', 'new link is active'); share_set_status($own, $l['id'], 'paused'); eq(share_state(share_mine($own, $l['id'])), 'paused', 'pause'); share_set_status($own, $l['id'], 'active'); eq(share_state(share_mine($own, $l['id'])), 'active', 'resume');
+throws(fn() => share_mine((int) $friend, $l['id']), 'not found', 'another user cannot touch the link'); throws(fn() => share_set_status((int) $friend, $l['id'], 'revoked'), 'not found', 'or revoke it');
+$e2 = share_create($own, ['title' => 'Expiring', 'widgets' => ['summary'], 'expires' => '1d', 'max_views' => '2']); run('UPDATE {c_share_links} SET expires_at=? WHERE id=?', [gmdate('Y-m-d H:i:s', time() - 5), $e2['id']]); eq(share_state(share_mine($own, $e2['id'])), 'expired', 'past expiry is expired');
+run('UPDATE {c_share_links} SET expires_at=NULL, views=2 WHERE id=?', [$e2['id']]); eq(share_state(share_mine($own, $e2['id'])), 'limit', 'view limit reached');
+share_set_status($own, $e2['id'], 'revoked'); eq(share_state(share_mine($own, $e2['id'])), 'revoked', 'revoke'); throws(fn() => share_set_status($own, $e2['id'], 'active'), 'cannot be turned back', 'a revoked link stays revoked');
+throws(fn() => share_create($own, ['title' => '', 'widgets' => ['summary']]), 'title', 'title is required'); throws(fn() => share_create($own, ['title' => 'x', 'widgets' => ['nope']]), 'widget', 'unknown widgets are dropped, none left is an error');
+throws(fn() => share_create($own, ['title' => 'x', 'widgets' => ['summary'], 'max_views' => '0']), 'views', 'bad max views'); throws(fn() => share_create($own, ['title' => 'x', 'widgets' => ['summary'], 'expires' => 'date', 'expires_on' => '2001-01-01']), 'date', 'past expiry date refused'); throws(fn() => share_create($own, ['title' => 'x', 'widgets' => ['summary'], 'password' => 'ab']), 'password', 'short password refused');
+
+section('Share links: sanitised data and public page');
+$d = share_data($own, ['summary', 'goals', 'spending', 'trend', 'bills', 'balance', 'budget'], true); $flat = json_encode($d);
+check('masked data has no amounts', $d['summary']['income'] === null && $d['balance']['total'] === null && $d['bills'] === [] || $d['bills'][0]['amount'] === null); check('no email or owner name leaks', !str_contains($flat, 'share-owner@x.test') && !str_contains($flat, 'Owner Person'));
+check('no transaction descriptions leak', !str_contains($flat, 'Weekly groceries') && !str_contains($flat, 'Salary')); $d2 = share_data($own, ['summary'], false); check('unmasked data has real amounts', is_int($d2['summary']['income']));
+check('only chosen widgets are returned', array_keys(share_data($own, ['goals'], true)) === ['goals']);
+function c_share_get(string $token, string $sub = '', string $method = 'GET', array $post = []): array { $_POST = $post; $_SERVER['REQUEST_METHOD'] = $method; $GLOBALS['__c_status'] = 200; ob_start(); $code = 0; try { share_public($token, $sub); } catch (Throwable $e) { echo 'EXC ' . $e->getMessage(); } $out = (string) ob_get_clean(); $code = $GLOBALS['__c_status'] ?? 200; $_SERVER['REQUEST_METHOD'] = 'GET'; return [$code, $out]; }
+[$code, $html] = c_share_get($l['token']); eq($code, 200, 'public page renders'); check('page shows the title and the message', str_contains($html, 'Our money') && str_contains($html, 'Hi family')); check('masked page shows the hidden marker and no rupee symbol amounts', str_contains($html, 'amounts hidden') && !preg_match('/₹\s?\d/', $html));
+check('page is noindex and has OpenGraph', str_contains($html, 'name="robots" content="noindex') && str_contains($html, 'property="og:title" content="Our money"') && str_contains($html, '/og.png')); check('no scripts and no app shell on the public page', !str_contains($html, '<script') && !str_contains($html, 'data-csrf') && !str_contains($html, 'share-owner@x.test'));
+eq((int) val('SELECT views FROM {c_share_links} WHERE id=?', [$l['id']]), 1, 'a view is counted'); check('last viewed is set', val('SELECT last_viewed_at FROM {c_share_links} WHERE id=?', [$l['id']]) !== null);
+[$c404] = c_share_get('A1b2C3d4E5f6G7h8I9j0K1'); eq($c404, 404, 'unknown token is 404'); share_set_status($own, $l['id'], 'paused'); [$cp, $hp] = c_share_get($l['token']); eq($cp, 403, 'paused link is closed'); check('paused page says so', str_contains($hp, 'paused')); share_set_status($own, $l['id'], 'active');
+[$cr] = c_share_get($e2['token']); eq($cr, 410, 'revoked link is gone (410)'); [$co, $ho] = c_share_get($l['token'], 'og.png'); check('OG image is a PNG', str_starts_with($ho, "\x89PNG"));
+$pw = share_create($own, ['title' => 'Private', 'widgets' => ['summary'], 'password' => 'open-sesame']); [$cw, $hw] = c_share_get($pw['token']); check('password link asks for the password and shows no data', str_contains($hw, 'type="password"') && !str_contains($hw, 'Income') && $cw === 200);
+preg_match('/name="t" value="([a-f0-9]+)"/', $hw, $tm); [$cb, $hb] = c_share_get($pw['token'], '', 'POST', ['password' => 'wrong', 't' => $tm[1] ?? '']); eq($cb, 401, 'wrong password is refused'); check('and says so', str_contains($hb, 'not right'));
+[$cn, $hn] = c_share_get($pw['token'], '', 'POST', ['password' => 'open-sesame', 't' => 'forged']); eq($cn, 401, 'the password form needs its own token');
+preg_match('/name="t" value="([a-f0-9]+)"/', $hn, $tm2); try { c_share_get($pw['token'], '', 'POST', ['password' => 'open-sesame', 't' => $tm2[1] ?? '']); } catch (Throwable $e) {} check('the right password opens the page (session flag set)', !empty($_SESSION['share_ok_' . $pw['id']]));
+$lim = share_create($own, ['title' => 'Once', 'widgets' => ['summary'], 'max_views' => '1']); $_SESSION = []; [$c1] = c_share_get($lim['token']); eq($c1, 200, 'first view of a one-view link works'); $_SESSION = []; [$c2] = c_share_get($lim['token']); eq($c2, 410, 'second visitor is refused'); eq((int) val('SELECT views FROM {c_share_links} WHERE id=?', [$lim['id']]), 1, 'views never exceed the limit');
+$_SESSION = []; run("DELETE FROM {c_rate}"); $blocked = false; for ($i = 0; $i < 95; $i++) { [$cc] = c_share_get('A1b2C3d4E5f6G7h8I9j0K1'); if ($cc === 429) { $blocked = true; break; } } check('public requests are rate limited', $blocked); run('DELETE FROM {c_rate}');
+check('QR for a link is valid SVG', str_contains(qr_svg(qr_matrix(share_url($l['token']), 'M'), ['fg' => '#0b3d2e']), '<path')); check('widget catalog is complete', count(SHARE_WIDGETS) === 7);
+share_update($own, $l['id'], ['title' => 'Renamed', 'widgets' => ['goals'], 'mask' => false, 'expires' => 'never', 'password' => 'newpass1']); $row = share_mine($own, $l['id']); check('owner can edit the link', $row['title'] === 'Renamed' && $row['widgets'] === 'goals' && !$row['mask'] && $row['password_hash'] !== null && $row['token_hash'] === hash('sha256', $l['token']));
