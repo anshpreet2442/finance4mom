@@ -15,26 +15,29 @@ function ai_gate_notice(array $u): string {
 function page_ai(): void {
     $u = require_login(); $s = snap(); $uid = (int) $u['id']; $profile = ai_profile($uid);
     layout_start('AI advisor', 'ai', $s);
-    page_header(($profile['agent_name'] ?: 'AI advisor'), 'Blunt, numbers-first advice on your own data. It can propose changes; nothing happens until you press Apply.',
-        btn('Actions &amp; undo', url('/ai/actions'), 'btn btn-sm', 'history') . btn('Settings', url('/ai/settings'), 'btn btn-sm', 'sliders-horizontal'), '<span class="pills-mark" data-pills data-size="56" data-label="AI advisor"></span>');
-    if ($n = ai_gate_notice($u)) { echo $n; layout_end(); return; }
+    if ($n = ai_gate_notice($u)) {
+        page_header(($profile['agent_name'] ?: 'AI advisor'), 'Blunt, numbers-first advice on your own data. It can propose changes; nothing happens until you press Apply.', btn('Actions &amp; undo', url('/ai/actions'), 'btn btn-sm', 'history') . btn('Settings', url('/ai/settings'), 'btn btn-sm', 'sliders-horizontal'), '<span class="pills-mark" data-pills data-size="56" data-label="AI advisor"></span>');
+        echo $n; layout_end(); return;
+    }
     ai_ensure_started($uid, $profile); $profile = ai_profile($uid);
-    $rows = array_reverse(all('SELECT id,role,content FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT 60', [$uid])); $msgs = [];
-    foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $msgs[] = $r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? '')] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? []]; }
+    $rows = array_reverse(all('SELECT id,role,content,created_at FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT 60', [$uid])); $msgs = [];
+    foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $at = gmdate('c', (int) strtotime($r['created_at'] . ' UTC')); $msgs[] = $r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? ''), 'files' => array_values((array) ($c['files'] ?? [])), 'at' => $at] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? [], 'at' => $at]; }
     // previews that were already applied / dismissed elsewhere show their real state
     foreach ($msgs as $mi => $m) { foreach ($m['blocks'] ?? [] as $bi => $b) {   // (index based: iterating a `?? []` copy by reference would silently drop the change)
         if (($b['type'] ?? '') === 'doc_estimate') { $msgs[$mi]['blocks'][$bi]['status'] = ai_docs_estimate_open($uid, $b) ? 'open' : 'closed'; }
         if (($b['type'] ?? '') === 'preview') { $msgs[$mi]['blocks'][$bi]['status'] = (string) (val('SELECT status FROM {ai_actions} WHERE id=? AND user_id=?', [$b['action_id'], $uid]) ?? 'dismissed'); } } }
     $data = ['messages' => $msgs, 'stage' => $profile['stage'], 'agent' => ['name' => $profile['agent_name'], 'avatar' => ai_avatar_url($profile)], 'endpoints' => ['chat' => url('/ai/chat'), 'act' => url('/ai/act'), 'upload' => url('/ai/upload'), 'upload_b64' => url('/ai/upload/b64'), 'shop' => url('/plugins')], 'models' => ai_model_options($u), 'defaultModel' => ai_pick_model($u, ''), 'efforts' => array_keys(ai_efforts_cfg()), 'defaultEffort' => 'Medium',
         'commands' => array_values(array_map(fn($c) => ['key' => $c['key'], 'name' => $c['name'], 'description' => $c['description']], ai_commands($u))), 'scopes' => array_keys(AI_SCOPES), 'web' => site_setting('ai_web_search', '0') === '1', 'upload' => ai_upload_limits(), 'csrf' => csrf_token(), 'user' => explode(' ', $u['name'])[0],
+        'docs' => ['pdf' => feature_on($u, 'ai_docs'), 'plugin' => url('/plugins') . '#plug-ai_docs'],
         'suggestions' => ['How am I doing this month?', 'Where does my money go?', 'Compare old vs new tax regime', 'What would a ₹10 lakh loan at 9% cost me?', 'Which of my goals is behind?', 'Which bills are due?']];
-    echo '<section class="card ai-chat" data-ai aria-label="Chat with your advisor"><header class="ai-chat__head">' . ai_avatar_img($profile, 'size-11') . '<div class="min-w-0"><p class="truncate font-semibold" data-ai-name>' . e($profile['agent_name'] ?: 'Your advisor') . '</p><p class="text-xs text-mute" data-ai-sub>'
-        . ($profile['stage'] === 'interview' ? 'Getting to know you' : ($profile['stage'] === 'naming' ? 'Waiting for a name' : 'Ready. Ask anything about your money.')) . '</p></div></header>'
-        . '<div class="ai-log" data-ai-log role="log" aria-live="polite" aria-relevant="additions"></div>'
+    echo '<link rel="stylesheet" href="' . e(asset('ai.css')) . '">';
+    echo '<section class="card ai-chat ai2" data-ai aria-label="Chat with your advisor"><header class="ai-chat__head"><span class="ai-logo" aria-hidden="true"><span class="pills-mark" data-pills data-size="32"></span></span><div class="ai-chat__who"><p class="ai-chat__name" data-ai-name>' . e($profile['agent_name'] ?: 'Your advisor') . '</p><p class="ai-chat__sub" data-ai-sub>'
+        . ($profile['stage'] === 'interview' ? 'Getting to know you' : ($profile['stage'] === 'naming' ? 'Waiting for a name' : 'Ready. Ask anything about your money.')) . '</p></div>'
+        . '<div class="ai-chat__tools"><span data-ai-speak-slot></span><a class="ai-iconbtn" href="' . e(url('/ai/actions')) . '" aria-label="Actions and undo" title="Actions and undo">' . icon('history', 'size-5') . '</a><a class="ai-iconbtn" href="' . e(url('/ai/settings')) . '" aria-label="Advisor settings" title="Advisor settings">' . icon('sliders-horizontal', 'size-5') . '</a></div></header>'
+        . '<div class="ai-stage"><div class="ai-log" data-ai-log role="log" aria-live="polite" aria-relevant="additions"></div><button type="button" class="ai-down" data-ai-down aria-label="Jump to the latest message">' . icon('arrow-down', 'size-5') . '</button></div>'
         . '<div class="ai-suggest" data-ai-suggest></div>'
-        . '<div class="ai-composer" data-ai-composer></div></section>';
+        . '<div class="ai-composer"><div data-ai-composer></div><p class="ai-foot">General information, not regulated advice. Confirm tax and legal matters with a practising chartered accountant.</p></div></section>';
     echo '<script src="' . e(asset('ai.js')) . '" defer></script><script type="application/json" id="ai-data">' . json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) . '</script><noscript><p class="mt-4 text-sm text-mute">The advisor needs JavaScript.</p></noscript>';
-    echo '<p class="mt-3 text-center text-xs text-mute">General information, not regulated advice. Confirm tax and legal matters with a practising chartered accountant.</p>';
     layout_end();
 }
 

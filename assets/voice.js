@@ -94,21 +94,22 @@
   function scan(root) {
     (root || d).querySelectorAll('[data-voice-read]').forEach(function (b) { bind(b, function () { var n = d.querySelector(b.getAttribute('data-voice-read')); return n ? textOf(n) : ''; }, 'report'); });
     (root || d).querySelectorAll('.ai-msg--assistant').forEach(function (m) {
-      if (m._voice) return; m._voice = true; var body = m.querySelector('.ai-msg__b') || m; var b = mkBtn('ai-voice-btn', 'Read this answer aloud'); b.hidden = true; body.appendChild(b); bind(b, function () { return textOf(body); }, 'chat');
+      if (m._voice || m.querySelector('[data-ai-read]')) return; m._voice = true; var body = m.querySelector('.ai-msg__b') || m; var b = mkBtn('ai-voice-btn', 'Read this answer aloud'); b.hidden = true; body.appendChild(b); bind(b, function () { return textOf(body); }, 'chat');
     });
     var log = (root || d).querySelector && (root || d).querySelector('[data-ai-log]'); if (log && !log._voiceAuto) { log._voiceAuto = true; autoReplies(log); }
     (root || d).querySelectorAll('[data-voice-test]').forEach(function (b) { if (b._vt) return; b._vt = true; b.addEventListener('click', function () { var out = d.querySelector('[data-voice-test-out]'); if (out) out.textContent = 'Playing…'; speak('Hello. This is a test of your voice settings.', { source: 'test', onState: function (s) { if (out && s === 'idle') out.textContent = status.tts === 'elevenlabs' ? 'Played with ElevenLabs.' : 'Played with the device voice (ElevenLabs is not active for you).'; } }); }); });
   }
   function autoReplies(log) {
     var wrap = d.createElement('label'); wrap.className = 'voice-auto'; wrap.hidden = true; var cb = d.createElement('input'); cb.type = 'checkbox'; cb.checked = ls('auto') === '1'; wrap.appendChild(cb); wrap.appendChild(d.createTextNode(' Speak replies')); var hint = d.createElement('span'); hint.className = 'voice-hint'; wrap.appendChild(hint);
-    log.parentNode.insertBefore(wrap, log); load().then(function () { if (status.tts !== 'none') { wrap.hidden = false; hint.textContent = status.hint ? ' · ' + status.hint : ''; } });
+    var slot = d.querySelector('[data-ai-speak-slot]'); if (slot) { wrap.className = 'voice-auto ai-switch'; wrap.textContent = ''; wrap.appendChild(cb); var tt = d.createElement('span'); tt.className = 'ai-switch__t'; tt.textContent = 'Speak replies'; wrap.appendChild(tt); wrap.appendChild(hint); wrap.title = 'Speak replies aloud'; slot.appendChild(wrap); } else { log.parentNode.insertBefore(wrap, log); }
+    load().then(function () { if (status.tts !== 'none') { wrap.hidden = false; hint.textContent = status.hint ? ' · ' + status.hint : ''; } });
     cb.addEventListener('change', function () { ls('auto', cb.checked ? '1' : '0'); if (!cb.checked) stop(); });
     var timer = null, spokenN = log.querySelectorAll('.ai-msg--assistant').length;
     new MutationObserver(function () { clearTimeout(timer); timer = setTimeout(function () {
       var all = log.querySelectorAll('.ai-msg--assistant'); if (!cb.checked || all.length <= spokenN) { spokenN = all.length; return; } var last = all[all.length - 1]; spokenN = all.length; var body = last.querySelector('.ai-msg__b') || last; var t = textOf(body); if (t) speak(t, { source: 'chat' });
     }, 1600); }).observe(log, { childList: true, subtree: true, characterData: true });
   }
-  w.MfVoice = { speak: speak, stop: stop, listen: listen, cancel: cancel, canListen: canListen, canSpeak: function () { return status.tts !== 'none'; }, status: function () { return status; }, load: load, scan: scan };
+  w.MfVoice = { bind: bind, textOf: textOf, speak: speak, stop: stop, listen: listen, cancel: cancel, canListen: canListen, canSpeak: function () { return status.tts !== 'none'; }, status: function () { return status; }, load: load, scan: scan };
   var obs = null; function start() { scan(d); if (!obs && d.body) { obs = new MutationObserver(function (ml) { for (var i = 0; i < ml.length; i++) { if (ml[i].addedNodes.length) { scan(d); break; } } }); obs.observe(d.body, { childList: true, subtree: true }); } }
   if (d.readyState !== 'loading') start(); else d.addEventListener('DOMContentLoaded', start);
 })();
