@@ -94,3 +94,6 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 - [ ] H3 PDF export plugin: monthly report + analysis to PDF (FPDF vendored in PHP; ReportLab is Python so only as optional engine if python3+reportlab exist, otherwise FPDF), charts rendered with GD, branded, INR, downloadable + shareable + emailable; plugin shop item
 - [ ] H4 Beautiful links plugin: share custom dashboard pages with friends via unguessable links; owner controls (what widgets are shown, expiry, password, view limits, revoke, view counts); read-only sanitized public view (no sensitive data unless chosen); QR code per link with tube-styled rounded QR (rounded modules joined like tubes, logo-free, SVG/PNG download) generated server-side without external services
 - [ ] H5 Admin: edit the HTML template sent to PayU for payment pages (safe templating with {parameters}, live preview, reset to default, sanitization, versioning/rollback)
+
+## G. Round 2 tester bugs
+- [x] (F4, fixed by tester) shop top-up never completed the purchase for charge ids 1-9 — shop_complete_after_topup() used nonce 'topup-<id>' (7 chars) but shop_buy() refuses nonces < 8 chars; the UserError was swallowed so the credit just sat in the wallet. Fixed in app/shop.php:163 (+ regression test in tests/run.php).
