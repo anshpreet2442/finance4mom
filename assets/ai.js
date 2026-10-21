@@ -121,6 +121,7 @@
     }
     var SR = w.SpeechRecognition || w.webkitSpeechRecognition, rec = null;
     function dictate() {
+      if (w.MfVoice && w.MfVoice.canListen()) { return w.MfVoice.listen(); } // ElevenLabs when available, otherwise the browser recogniser (see assets/voice.js)
       return new Promise(function (res, rej) {
         try { rec = new SR(); rec.lang = d.documentElement.lang === 'en' ? (navigator.language || 'en-IN') : d.documentElement.lang; rec.interimResults = false; rec.maxAlternatives = 1; rec.continuous = false; var got = ''; rec.onresult = function (e) { got = e.results[0][0].transcript; }; rec.onerror = function () { rej(); }; rec.onend = function () { res(got); }; rec.start(); } catch (e) { rej(e); }
       });
@@ -132,7 +133,7 @@
       var models = data.models, def = ls('model') && models.some(function (m) { return m.key === ls('model') && !m.locked; }) ? ls('model') : data.defaultModel, eff = ls('effort') && data.efforts.indexOf(ls('effort')) >= 0 ? ls('effort') : data.defaultEffort;
       bar = PromptBar.create({ placeholder: stage === 'ready' ? 'Ask anything about your money' : 'Type your answer', sources: src, commands: data.commands, models: models, defaultModel: def, efforts: data.efforts, defaultEffort: eff, className: 'prompt-bar--app',
         onEffortChange: function (e) { ls('effort', e); }, onModelChange: function (k) { ls('model', k); }, onNavigate: nav, onLocked: function () { nav(data.endpoints.shop); }, onSend: function (t, o) { send(t, o); }, onStop: stop, onAttach: pickFiles,
-        onDictate: SR ? dictate : null, onDictateCancel: function () { try { rec && rec.abort(); } catch (e) { } }, maxRows: 5 });
+        onDictate: (SR || (w.MfVoice && w.MfVoice.canListen())) ? dictate : null, onDictateCancel: function () { try { rec && rec.abort(); } catch (e) { } try { w.MfVoice && w.MfVoice.cancel(); } catch (e) { } }, maxRows: 5 });
       bar.setModels(models, { name: 'Get in Plugins', href: data.endpoints.shop, description: 'Premium models' });
       mount.appendChild(bar.el);
     }
@@ -159,7 +160,7 @@
         if (!body.childNodes.length) body.closest('.ai-msg').remove(); busy = false; ctrl = null; if (bar) { bar.setBusy(false); bar.focus(); } trimOldPrompts(); suggestions(); scroll();
       });
     }
-    buildBar();
+    if (w.MfVoice && w.MfVoice.load) { w.MfVoice.load().then(buildBar, buildBar); } else { buildBar(); }
   }
   function boot() { init(d.querySelector('[data-ai]')); }
   if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot); else boot(); d.addEventListener('mfnc:page', boot);

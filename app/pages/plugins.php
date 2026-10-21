@@ -73,7 +73,7 @@ function page_plugins(): void {
             $feat = $it['kind'] !== 'pack'; $soon = $it['state'] === 'owned' && $it['until'] && !$it['admin_included'] && days_between(today(), $it['until']) <= 7;
             echo '<article class="plan-card shop-card' . ($it['state'] === 'owned' && !$it['admin_included'] ? ' is-owned' : '') . ($it['state'] === 'locked' && $it['kind'] === 'model' ? ' is-locked' : '') . '" id="plug-' . e($it['key']) . '"><div class="flex items-start justify-between gap-3">' . shop_icon($it) . '<div class="flex flex-wrap justify-end gap-1.5">' . shop_state_badge($it) . ($soon ? badge('Ends soon', 'warn') : '') . '</div></div>'
                 . '<h3 class="mt-1 text-lg font-semibold tracking-tight">' . e($it['name']) . '</h3><p class="text-sm text-mute">' . e($it['desc']) . '</p><p class="num mt-1 text-base font-semibold">' . shop_price_text($it) . '</p>'
-                . '<div class="mt-auto pt-3">' . shop_action_html($it, $bal, $nonce) . '</div></article>';
+                . '<div class="mt-auto pt-3">' . shop_action_html($it, $bal, $nonce) . '</div>' . (function_exists('c_plugin_extra') ? c_plugin_extra($it, $u) : '') . '</article>';
         }
         echo '</div>';
     }
