@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 function qs_keep(array $f, array $extra = []): array {
-    return array_merge(array_filter(['q' => $f['q'], 'type' => $f['type'], 'category' => $f['category'] ?: '', 'account' => $f['account'] ?: '', 'from' => $f['from'], 'to' => $f['to'], 'status' => $f['status'], 'sort' => $f['sort'], 'dir' => $f['dir']], fn($v) => $v !== '' && $v !== null), $extra);
+    return array_merge(array_filter(['q' => $f['q'], 'type' => $f['type'], 'category' => $f['category'] ?: '', 'account' => $f['account'] ?: '', 'from' => $f['from'], 'to' => $f['to'], 'status' => $f['status'], 'sort' => $f['sort'], 'dir' => $f['dir'], 'import' => $f['import'] ?: ''], fn($v) => $v !== '' && $v !== null), $extra);
 }
 
 function page_transactions(): void {
@@ -22,9 +22,9 @@ function page_transactions(): void {
     $u = current_user();
     layout_start('Transactions', 'transactions', $s, ['hero' => true]);
     echo m_hero($s, $u, 'compact', 'Transactions');
-    echo '<div class="m-sheet pb-6 lg:hidden">' . m_actions() . '<div class="flex items-center justify-between px-6 pb-1 pt-6"><h2 class="text-xl font-semibold tracking-tight">Recent Transactions</h2><a href="' . e(url('/analysis')) . '" class="inline-flex items-center gap-1 text-sm font-medium text-lime-dk">' . icon('chart-pie', 'size-4') . ' Analysis</a></div>';
+    echo '<div class="m-sheet pb-6 lg:hidden">' . m_actions() . '<div class="flex items-center justify-between px-6 pb-1 pt-6"><h2 class="text-xl font-semibold tracking-tight">Recent Transactions</h2><a href="' . e(url('/analysis')) . '" class="inline-flex items-center gap-1 text-sm font-medium text-lime-dk">' . icon('chart-pie', 'size-4') . ' Analysis</a><a href="' . e(url('/import')) . '" class="inline-flex items-center gap-1 text-sm font-medium text-lime-dk">' . icon('upload', 'size-4') . ' Import</a></div>';
     echo '<details class="mx-6 mb-2 rounded-2xl bg-soft px-4 py-3" ' . ($f['q'] || $f['type'] || $f['category'] || $f['account'] || $f['from'] || $f['to'] || $f['status'] ? 'open' : '') . '><summary class="flex cursor-pointer list-none items-center justify-between text-sm font-medium"><span class="inline-flex items-center gap-2">' . icon('sliders-horizontal', 'size-4') . ' Search & filter</span>' . icon('chevron-down', 'size-4') . '</summary>'
-        . '<form method="get" class="mt-3 grid grid-cols-2 gap-3" role="search"><div class="col-span-2"><label class="label" for="mq">Search</label><input id="mq" name="q" value="' . e($f['q']) . '" placeholder="Description or notes" class="input"></div>'
+        . '<form method="get" class="mt-3 grid grid-cols-2 gap-3" role="search">' . ($f['import'] ? '<input type="hidden" name="import" value="' . (int) $f['import'] . '">' : '') . '<div class="col-span-2"><label class="label" for="mq">Search</label><input id="mq" name="q" value="' . e($f['q']) . '" placeholder="Description or notes" class="input"></div>'
         . '<div><label class="label" for="mt">Type</label><select id="mt" name="type" class="input"><option value="">All</option>' . implode('', array_map(fn($t) => '<option value="' . $t . '"' . ($f['type'] === $t ? ' selected' : '') . '>' . cap($t) . '</option>', ['income', 'expense', 'transfer', 'refund', 'adjustment'])) . '</select></div>'
         . '<div><label class="label" for="mc">Category</label><select id="mc" name="category" class="input"><option value="">All</option>' . implode('', array_map(fn($k, $v) => '<option value="' . $k . '"' . ($f['category'] === $k ? ' selected' : '') . '>' . e($v) . '</option>', array_keys($catOpts), $catOpts)) . '</select></div>'
         . '<div><label class="label" for="mf">From</label><input id="mf" type="date" name="from" value="' . e($f['from']) . '" class="input"></div><div><label class="label" for="mto">To</label><input id="mto" type="date" name="to" value="' . e($f['to']) . '" class="input"></div>'
@@ -34,21 +34,22 @@ function page_transactions(): void {
         $icn = ['income' => 'arrow-down-left', 'refund' => 'undo-2', 'transfer' => 'arrow-left-right', 'adjustment' => 'sliders-horizontal'][$t['type']] ?? cat_icon(cat_name($s, $t['category_id'] ? (int) $t['category_id'] : null));
         ob_start();
         echo '<div class="px-6 py-1"><' . ($t['occurrence_id'] ? 'div' : 'button type="button" data-tx-edit="' . json_attr(tx_edit_json($s, $t)) . '"') . ' class="flex w-full items-center gap-3 rounded-2xl py-2.5 text-left"><span class="grid size-12 shrink-0 place-items-center rounded-full bg-soft">' . icon($icn, 'size-5') . '</span>'
-            . '<span class="min-w-0 flex-1"><span class="block truncate font-medium">' . e(tx_label($s, $t)) . '</span><span class="block truncate text-xs text-mute">' . e($t['date'] === $s['today'] ? 'Today' : date_label($t['date'])) . ' · ' . e($t['type'] === 'transfer' ? 'Transfer' : cat_path($s, $t['category_id'] ? (int) $t['category_id'] : null)) . ($t['status'] === 'planned' ? ' · Planned' : '') . '</span></span>'
+            . '<span class="min-w-0 flex-1"><span class="block truncate font-medium">' . e(tx_label($s, $t)) . '</span><span class="block truncate text-xs text-mute">' . e($t['date'] === $s['today'] ? 'Today' : date_label($t['date'])) . ' · ' . e($t['type'] === 'transfer' ? 'Transfer' : cat_path($s, $t['category_id'] ? (int) $t['category_id'] : null)) . ($t['status'] === 'planned' ? ' · Planned' : '') . '</span>' . tx_extra_line($t) . '</span>'
             . '<span class="num shrink-0 font-semibold ' . amount_class($t) . '">' . e(signed_amount($t)) . '</span></' . ($t['occurrence_id'] ? 'div' : 'button') . '></div>';
         $start = []; if ($t['status'] === 'planned') { $start[] = ['action' => 'transaction-complete', 'fields' => ['id' => $t['id']], 'label' => $t['type'] === 'income' ? 'Received' : 'Paid', 'icon' => 'circle-check', 'tone' => 'ok']; }
-        if (!$t['occurrence_id']) { $start[] = ['type' => 'attr', 'attrs' => 'data-tx-edit="' . json_attr(tx_edit_json($s, $t)) . '"', 'label' => 'Edit', 'icon' => 'pencil', 'tone' => 'primary']; }
+        if (!$t['occurrence_id']) { $start[] = ['type' => 'attr', 'attrs' => 'data-tx-edit="' . json_attr(tx_edit_json($s, $t)) . '"', 'label' => 'Edit', 'icon' => 'pencil', 'tone' => 'primary']; $start[] = ['type' => 'attr', 'attrs' => 'data-remark-edit="' . json_attr(['id' => $t['id'], 'remarks' => $t['remarks'] ?? '', 'label' => tx_label($s, $t)]) . '"', 'label' => 'Remark', 'icon' => 'message-square', 'tone' => 'dark']; }
         echo '<li>' . swipe_row((string) ob_get_clean(), $start, [['action' => 'transaction-delete', 'fields' => ['id' => $t['id']], 'label' => 'Delete', 'icon' => 'trash-2', 'tone' => 'danger', 'undo' => 'Transaction deleted']], tx_label($s, $t) . ', ' . signed_amount($t)) . '</li>';
     }
     echo '</ul>';
     if (count($rows) > $PAGE) { echo '<div class="flex items-center justify-between pt-4 text-sm"><span class="text-mute">Page ' . $page . ' of ' . (int) ceil(count($rows) / $PAGE) . '</span><div class="flex gap-2">' . ($page > 1 ? '<a class="btn btn-sm" href="' . e(url('/transactions', qs_keep($f, ['page' => $page - 1]))) . '">Previous</a>' : '') . ($page * $PAGE < count($rows) ? '<a class="btn btn-sm" href="' . e(url('/transactions', qs_keep($f, ['page' => $page + 1]))) . '">Next</a>' : '') . '</div></div>'; }
     echo '</div></div><div class="hidden px-0 lg:block">';
-    $import = '<button type="button" class="btn" data-open="#import-dialog">' . icon('upload', 'size-4') . ' Import CSV</button>';
+    $import = btn('Import statement', url('/import'), 'btn', 'upload') . '<button type="button" class="btn" data-open="#import-dialog">' . icon('upload', 'size-4') . ' Import CSV</button>';
     page_header('Transactions', 'Every rupee in and out, in one searchable ledger.', $import . btn('Export CSV', url('/transactions/export', qs_keep($f)), 'btn', 'download') . '<button type="button" class="btn btn-dark" data-tx-new>' . icon('plus', 'size-4') . ' Add transaction</button>');
     ?>
 <dialog id="import-dialog" class="modal" aria-labelledby="import-t"><div class="modal-body"><div class="mb-4 flex items-start justify-between gap-4"><h2 id="import-t" class="text-xl font-semibold tracking-tight">Import transactions from CSV</h2><button type="button" class="btn btn-ghost btn-sm -mr-2" data-close aria-label="Close"><?= icon('x', 'size-4') ?></button></div>
   <?= simple_form('transactions-import', [['name' => 'file', 'label' => 'CSV file', 'type' => 'file', 'accept' => '.csv,text/csv', 'required' => true, 'hint' => 'Columns: date (YYYY-MM-DD), type, amount, category, account, description, payment_method, notes (optional: status, to_account). Every row is validated first; nothing is imported if any row is invalid.']], 'Import', 'btn btn-primary', true) ?></div></dialog>
 
+<?php if ($f['import']): $imRow = one('SELECT source,filename,created_at FROM {imports} WHERE id=? AND user_id=?', [$f['import'], $u['id']]); ?><div class="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-soft px-4 py-3 text-sm" role="status"><?= $imRow ? import_badge(['source' => $imRow['source']], 'src', true) : '' ?><span>Showing only the import <?= $imRow ? '“' . e($imRow['filename']) . '” of ' . e(date_label(substr((string) $imRow['created_at'], 0, 10))) : '#' . (int) $f['import'] ?></span><a class="btn btn-sm ml-auto" href="<?= e(url('/transactions')) ?>">Show everything</a></div><?php endif; ?>
 <form method="get" class="card mb-5 grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-6" role="search" aria-label="Filter transactions">
   <div class="lg:col-span-2"><label class="label" for="fq">Search</label><input id="fq" name="q" value="<?= e($f['q']) ?>" placeholder="Description or notes" class="input"></div>
   <div><label class="label" for="ft">Type</label><select id="ft" name="type" class="input"><option value="">All</option><?php foreach (['income', 'expense', 'transfer', 'refund', 'adjustment'] as $t): ?><option value="<?= $t ?>" <?= $f['type'] === $t ? 'selected' : '' ?>><?= cap($t) ?></option><?php endforeach; ?></select></div>
@@ -57,7 +58,7 @@ function page_transactions(): void {
   <div><label class="label" for="fs">Status</label><select id="fs" name="status" class="input"><option value="">All</option><option value="completed" <?= $f['status'] === 'completed' ? 'selected' : '' ?>>Completed</option><option value="planned" <?= $f['status'] === 'planned' ? 'selected' : '' ?>>Planned</option></select></div>
   <div><label class="label" for="ff">From</label><input id="ff" type="date" name="from" value="<?= e($f['from']) ?>" class="input"></div>
   <div><label class="label" for="fto">To</label><input id="fto" type="date" name="to" value="<?= e($f['to']) ?>" class="input"></div>
-  <input type="hidden" name="sort" value="<?= e($f['sort']) ?>"><input type="hidden" name="dir" value="<?= e($f['dir']) ?>">
+  <input type="hidden" name="sort" value="<?= e($f['sort']) ?>"><input type="hidden" name="dir" value="<?= e($f['dir']) ?>"><?php if ($f['import']): ?><input type="hidden" name="import" value="<?= (int) $f['import'] ?>"><?php endif; ?>
   <div class="flex items-end gap-2 lg:col-span-2"><button class="btn btn-dark">Apply filters</button><a href="<?= e(url('/transactions')) ?>" class="btn btn-ghost">Clear</a></div>
 </form>
 
@@ -70,13 +71,13 @@ function page_transactions(): void {
     <tbody class="divide-y divide-line">
     <?php foreach ($pageRows as $t): ?>
       <tr><td class="td num whitespace-nowrap text-mute"><?= e(date_label($t['date'])) ?></td>
-        <td class="td"><div class="font-medium"><?= e($t['description'] ?: '—') ?></div><div class="mt-0.5 flex flex-wrap gap-1"><?= $t['status'] === 'planned' ? badge('Planned', 'warn') : '' ?><?= !in_array($t['type'], ['income', 'expense'], true) ? badge($t['type']) : '' ?><?= $t['occurrence_id'] ? badge('Bill payment') : '' ?></div></td>
+        <td class="td"><div class="font-medium"><?= e($t['description'] ?: '—') ?></div><div class="mt-0.5 flex flex-wrap gap-1"><?= $t['status'] === 'planned' ? badge('Planned', 'warn') : '' ?><?= !in_array($t['type'], ['income', 'expense'], true) ? badge($t['type']) : '' ?><?= $t['occurrence_id'] ? badge('Bill payment') : '' ?></div><?= tx_extra_line($t, 'full') ?></td>
         <td class="td text-mute"><?= e($t['type'] === 'transfer' ? 'Transfer' : cat_path($s, $t['category_id'] ? (int) $t['category_id'] : null)) ?></td>
         <td class="td text-mute"><?= e($t['type'] === 'transfer' ? ($acc[$t['account_id']] ?? '') . ' → ' . ($acc[$t['to_account_id']] ?? '') : ($acc[$t['account_id']] ?? '')) ?></td>
         <td class="td num whitespace-nowrap text-right font-semibold <?= amount_class($t) ?>"><?= e(signed_amount($t)) ?></td>
         <td class="td whitespace-nowrap text-right"><div class="flex items-center justify-end gap-1">
           <?php if ($t['status'] === 'planned') { echo post_btn($t['type'] === 'income' ? 'Mark received' : 'Mark paid', 'transaction-complete', ['id' => $t['id']]); } ?>
-          <?php if (!$t['occurrence_id']): ?><button type="button" class="btn btn-ghost btn-sm" data-tx-edit="<?= json_attr(tx_edit_json($s, $t)) ?>">Edit</button><?php endif; ?>
+          <?php if (!$t['occurrence_id']): ?><button type="button" class="btn btn-ghost btn-sm" data-remark-edit="<?= json_attr(['id' => $t['id'], 'remarks' => $t['remarks'] ?? '', 'label' => tx_label($s, $t)]) ?>" aria-label="<?= $t['remarks'] ? 'Edit remark' : 'Add remark' ?>" title="<?= $t['remarks'] ? 'Edit remark' : 'Add remark' ?>"><?= icon('message-square', 'size-4') ?></button><button type="button" class="btn btn-ghost btn-sm" data-tx-edit="<?= json_attr(tx_edit_json($s, $t)) ?>">Edit</button><?php endif; ?>
           <?= confirm_btn('Delete', 'transaction-delete', ['id' => $t['id']], 'Delete transaction?', 'This permanently removes “' . ($t['description'] ?: $t['type']) . '” (' . fmt(abs($t['amount'])) . ') and updates your balances.' . ($t['type'] === 'expense' ? ' Any refunds linked to it are removed too.' : '')) ?></div></td></tr>
     <?php endforeach; ?></tbody></table></div>
   <?php if (count($rows) > $PAGE): ?><div class="flex items-center justify-between border-t border-line px-6 py-4 text-sm"><span class="text-mute">Page <?= $page ?> of <?= (int) ceil(count($rows) / $PAGE) ?></span><div class="flex gap-2">
@@ -96,10 +97,10 @@ function page_transactions_export(): void {
     $u = require_login(); $s = load_snapshot((int) $u['id']); $f = parse_tx_filter(); $acc = array_column($s['accounts'], 'name', 'id');
     header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename="transactions-' . $s['today'] . '.csv"');
     $safe = function ($v) { $v = (string) ($v ?? ''); return ($v !== '' && (preg_match('/^[=+@]/', $v) || (str_starts_with($v, '-') && !preg_match('/^-\d/', $v)))) ? "'" . $v : $v; };
-    $out = fopen('php://output', 'w'); fputcsv($out, ['date', 'type', 'amount', 'category', 'account', 'description', 'payment_method', 'notes', 'status', 'to_account'], ',', '"', '');
+    $out = fopen('php://output', 'w'); fputcsv($out, ['date', 'type', 'amount', 'category', 'account', 'description', 'payment_method', 'notes', 'status', 'to_account', 'remarks'], ',', '"', '');
     foreach (filter_txs($s, $f) as $t) {
         $cat = $t['category_id'] ? explode(' › ', cat_path($s, (int) $t['category_id'])) : [];
-        fputcsv($out, [$t['date'], $t['type'], money_input((int) $t['amount']), $cat ? end($cat) : '', $acc[$t['account_id']] ?? '', $safe($t['description']), $t['payment_method'], $safe($t['notes']), $t['status'], $t['to_account_id'] ? ($acc[$t['to_account_id']] ?? '') : ''], ',', '"', '');
+        fputcsv($out, [$t['date'], $t['type'], money_input((int) $t['amount']), $cat ? end($cat) : '', $acc[$t['account_id']] ?? '', $safe($t['description']), $t['payment_method'], $safe($t['notes']), $t['status'], $t['to_account_id'] ? ($acc[$t['to_account_id']] ?? '') : '', $safe($t['remarks'] ?? '')], ',', '"', '');
     }
     fclose($out);
 }

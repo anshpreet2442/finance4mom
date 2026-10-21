@@ -85,7 +85,7 @@ function do_transactions_import(array $u): string {
         elseif (!$amt || ($type !== 'adjustment' && $amt <= 0)) { $errors[] = "Row $line: invalid amount."; }
         elseif (!$acct) { $errors[] = "Row $line: unknown account \"" . $col($r, 'account') . '".'; }
         else { $parsed[] = ['type' => $type, 'status' => strtolower($col($r, 'status')) === 'planned' && in_array($type, ['income', 'expense'], true) ? 'planned' : 'completed', 'to_account_id' => $to['id'] ?? null, 'date' => $date, 'amount' => $amt, 'account_id' => (int) $acct['id'],
-            'category' => $col($r, 'category'), 'description' => mb_substr($col($r, 'description'), 0, 200), 'payment_method' => mb_substr($col($r, 'payment_method'), 0, 40) ?: null, 'notes' => mb_substr($col($r, 'notes'), 0, 500) ?: null]; }
+            'category' => $col($r, 'category'), 'description' => mb_substr($col($r, 'description'), 0, 200), 'payment_method' => mb_substr($col($r, 'payment_method'), 0, 40) ?: null, 'notes' => mb_substr($col($r, 'notes'), 0, 500) ?: null, 'remarks' => mb_substr($col($r, 'remarks'), 0, 500) ?: null]; }
     }
     if ($errors) { throw new UserError(count($errors) . ' problem(s), nothing imported. ' . implode(' ', array_slice($errors, 0, 5))); }
     tx(function () use ($uid, $parsed) {
@@ -98,7 +98,7 @@ function do_transactions_import(array $u): string {
                 if (!$hit) { $newId = insert('INSERT INTO {categories} (user_id,name,grp) VALUES (?,?,?)', [$uid, mb_substr($name, 0, 60), $p['type'] === 'income' ? 'income' : 'custom']); $hit = ['id' => $newId, 'name' => $name]; $cats[] = $hit; }
                 $catId = (int) $hit['id'];
             }
-            create_transaction($uid, ['type' => $p['type'], 'status' => $p['status'], 'amount' => $p['amount'], 'date' => $p['date'], 'account_id' => $p['account_id'], 'to_account_id' => $p['to_account_id'], 'category_id' => $catId, 'description' => $p['description'], 'payment_method' => $p['payment_method'], 'notes' => $p['notes']]);
+            create_transaction($uid, ['type' => $p['type'], 'status' => $p['status'], 'amount' => $p['amount'], 'date' => $p['date'], 'account_id' => $p['account_id'], 'to_account_id' => $p['to_account_id'], 'category_id' => $catId, 'description' => $p['description'], 'payment_method' => $p['payment_method'], 'notes' => $p['notes'], 'remarks' => $p['remarks']]);
         }
     });
     return 'Imported ' . count($parsed) . ' transactions.';

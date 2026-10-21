@@ -115,7 +115,7 @@ function parse_tx_filter(): array {
     $g = fn($k) => get_str($k, 100); $iso = fn($v) => $v !== '' && valid_date($v) ? $v : '';
     return ['q' => $g('q'), 'type' => in_array($g('type'), ['income', 'expense', 'transfer', 'refund', 'adjustment'], true) ? $g('type') : '', 'category' => ctype_digit($g('category')) ? (int) $g('category') : 0,
         'account' => ctype_digit($g('account')) ? (int) $g('account') : 0, 'from' => $iso($g('from')), 'to' => $iso($g('to')), 'status' => in_array($g('status'), ['completed', 'planned'], true) ? $g('status') : '',
-        'sort' => $g('sort') === 'amount' ? 'amount' : 'date', 'dir' => $g('dir') === 'asc' ? 'asc' : 'desc'];
+        'sort' => $g('sort') === 'amount' ? 'amount' : 'date', 'dir' => $g('dir') === 'asc' ? 'asc' : 'desc', 'import' => ctype_digit($g('import')) ? (int) $g('import') : 0];
 }
 function filter_txs(array $s, array $f): array {
     $cats = $f['category'] ? array_flip(cat_desc($s, $f['category'])) : null; $q = mb_strtolower($f['q']);
@@ -124,7 +124,8 @@ function filter_txs(array $s, array $f): array {
         if ($cats && !($t['category_id'] && isset($cats[(int) $t['category_id']]))) { return false; }
         if ($f['account'] && (int) $t['account_id'] !== $f['account'] && (int) $t['to_account_id'] !== $f['account']) { return false; }
         if ($f['from'] && $t['date'] < $f['from']) { return false; } if ($f['to'] && $t['date'] > $f['to']) { return false; }
-        if ($q !== '' && !str_contains(mb_strtolower($t['description'] . ' ' . ($t['notes'] ?? '')), $q)) { return false; }
+        if (!empty($f['import']) && (int) ($t['import_id'] ?? 0) !== $f['import']) { return false; }
+        if ($q !== '' && !str_contains(mb_strtolower($t['description'] . ' ' . ($t['notes'] ?? '') . ' ' . ($t['remarks'] ?? '')), $q)) { return false; }
         return true;
     }));
     $sign = $f['dir'] === 'asc' ? 1 : -1;
@@ -134,5 +135,5 @@ function filter_txs(array $s, array $f): array {
 function tx_edit_json(array $s, array $t): array {
     $fund = null; foreach ($s['contribs'] as $c) { if ((int) $c['transaction_id'] === (int) $t['id'] && $c['target_type'] === 'goal') { $fund = (int) $c['target_id']; } }
     return ['id' => $t['id'], 'type' => $t['type'], 'status' => $t['status'], 'amount' => money_input((int) $t['amount']), 'date' => $t['date'], 'account_id' => $t['account_id'], 'to_account_id' => $t['to_account_id'], 'category_id' => $t['category_id'],
-        'description' => $t['description'], 'payment_method' => $t['payment_method'], 'notes' => $t['notes'], 'refund_of' => $t['refund_of'], 'fund_goal_id' => $fund];
+        'description' => $t['description'], 'payment_method' => $t['payment_method'], 'notes' => $t['notes'], 'remarks' => $t['remarks'] ?? null, 'refund_of' => $t['refund_of'], 'fund_goal_id' => $fund, 'imp' => tx_import_info($t)];
 }

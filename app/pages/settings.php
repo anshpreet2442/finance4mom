@@ -16,8 +16,15 @@ function page_settings(): void {
         ['name' => 'theme', 'label' => 'Theme', 'type' => 'select', 'required' => true, 'half' => true, 'value' => $p['theme'], 'options' => ['system' => 'Match my device', 'light' => 'Light', 'dark' => 'Dark']],
         ['name' => 'reminder_days', 'label' => 'Default reminder (days before due)', 'type' => 'number', 'min' => 0, 'max' => 60, 'half' => true, 'value' => $p['reminder_days']],
         ['name' => 'big_purchase_threshold', 'label' => 'Treat purchases above this as big-ticket', 'type' => 'money', 'value' => money_input((int) $p['big_purchase_threshold'])],
+        ['name' => '_display', 'type' => 'hidden', 'value' => '1'],
+        ['name' => 'show_import_labels', 'label' => 'Show “Imported from…” labels (for example Paytm) on imported transactions', 'type' => 'checkbox', 'value' => (bool) ($p['show_import_labels'] ?? 1)],
     ], 'Save preferences');
     echo '<p class="mt-3 text-xs text-mute">Changing currency or locale only changes how amounts are displayed. Existing amounts are not converted.</p>'; card_close();
+    $imps = all('SELECT id,source,filename,rows_imported,status,created_at FROM {imports} WHERE user_id=? ORDER BY id DESC LIMIT 3', [$u['id']]);
+    card_open('Import statements', 'Bring in a Paytm UPI statement (.xlsx) and keep a history you can undo.', btn('Import a statement', url('/import'), 'btn btn-sm', 'upload'));
+    if (!$imps) { echo '<p class="text-sm text-mute">No imports yet.</p>'; }
+    else { echo '<ul class="divide-y divide-line text-sm">'; foreach ($imps as $im) { echo '<li class="flex flex-wrap items-center justify-between gap-2 py-2.5"><span class="min-w-0">' . import_badge(['source' => $im['source']], 'src', true) . ' <span class="truncate">' . e($im['filename']) . '</span><span class="block text-xs text-mute">' . e(date_label(substr((string) $im['created_at'], 0, 10))) . ' · ' . (int) $im['rows_imported'] . ' transactions' . ($im['status'] === 'removed' ? ' · removed' : '') . '</span></span></li>'; } echo '</ul><a href="' . e(url('/import') . '#history') . '" class="mt-2 inline-block text-xs text-mute underline">All imports and undo</a>'; }
+    card_close();
     card_open('App & colours', 'Install it on your phone and choose the palette.');
     echo '<p class="mb-2 text-sm font-medium">Colour palette</p>' . jelly(['auto' => ['label' => 'Auto (ember on phones)', 'attrs' => 'data-palette-set="auto"'], 'ember' => ['label' => 'Ember', 'attrs' => 'data-palette-set="ember"'], 'lime' => ['label' => 'Lime', 'attrs' => 'data-palette-set="lime"']], 'auto', ['size' => 'sm', 'label' => 'Colour palette', 'class' => 'palette-jelly']);
     echo ''
@@ -64,7 +71,7 @@ function page_settings(): void {
 
 function page_backup(): void {
     $u = require_login();
-    $tables = ['preferences', 'accounts', 'categories', 'budgets', 'transactions', 'recurring_templates', 'bills', 'bill_occurrences', 'goals', 'purchases', 'contributions', 'monthly_plans', 'plan_lines', 'notifications'];
+    $tables = ['preferences', 'accounts', 'categories', 'budgets', 'transactions', 'recurring_templates', 'bills', 'bill_occurrences', 'goals', 'purchases', 'contributions', 'monthly_plans', 'plan_lines', 'notifications', 'imports'];
     $out = ['exportedAt' => gmdate('c'), 'user' => ['name' => $u['name'], 'email' => $u['email']], 'note' => 'All money values are integer minor units (paise).'];
     foreach ($tables as $t) { $out[$t] = all("SELECT * FROM {{$t}} WHERE user_id = ?", [$u['id']]); }
     header('Content-Type: application/json'); header('Content-Disposition: attachment; filename="moms-finance-backup.json"');

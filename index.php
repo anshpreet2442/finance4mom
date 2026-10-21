@@ -91,7 +91,7 @@ if (method() === 'POST') {
 // ---- pages ----
 $routes = [
     '/' => 'page_dashboard', '/login' => 'page_login', '/register' => 'page_register',
-    '/transactions' => 'page_transactions', '/transactions/export' => 'page_transactions_export',
+    '/transactions' => 'page_transactions', '/transactions/export' => 'page_transactions_export', '/import' => 'page_import',
     '/income' => 'page_income', '/expenses' => 'page_expenses', '/budget' => 'page_budget',
     '/goals' => 'page_goals', '/house' => 'page_house', '/big-purchases' => 'page_big', '/bills' => 'page_bills', '/yearly' => 'page_yearly',
     '/analysis' => 'page_analysis', '/accounts' => 'page_accounts', '/dues' => 'page_dues', '/dues/return' => 'page_dues_return', '/admin/billing' => 'page_admin_billing',

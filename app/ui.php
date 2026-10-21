@@ -181,11 +181,19 @@ function tx_dialog(array $s): string {
     <div data-hide="transfer adjustment" class="col-span-2"><?= field(['name' => 'payment_method', 'label' => 'Payment method', 'type' => 'select', 'options' => ['UPI' => 'UPI', 'Card' => 'Card', 'Cash' => 'Cash', 'Bank transfer' => 'Bank transfer', 'Cheque' => 'Cheque', 'Other' => 'Other'], 'empty' => 'Not specified']) ?></div>
     <div data-show="refund" class="col-span-2 hidden"><?= field(['name' => 'refund_of', 'label' => 'Refund of (optional)', 'type' => 'select', 'options' => $expenses, 'empty' => 'Not linked to an expense']) ?></div>
     <?php if ($funds): ?><div data-show="expense" class="col-span-2"><?= field(['name' => 'fund_goal_id', 'label' => 'Pay from personal fund', 'type' => 'select', 'options' => $funds, 'empty' => 'No, from my account balance']) ?></div><?php endif; ?>
+    <?= field(['name' => 'remarks', 'label' => 'Remarks (optional)', 'placeholder' => 'A short remark shown under the description', 'hint' => 'Searchable. Different from notes: it appears in lists.']) ?>
     <?= field(['name' => 'notes', 'label' => 'Notes (optional)', 'type' => 'textarea']) ?>
+    <div class="imp-box" id="tx-imp" hidden aria-live="polite"></div>
     <?php if ($rc = receipt_fields()): ?><div data-show="expense" class="col-span-2 flex flex-col gap-2" data-receipt><?= form_fields($rc) ?></div><?php endif; ?>
     <label data-show="income expense" class="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" name="planned" value="1" class="size-4 accent-[var(--lime-dk)]"> <span data-planned-label>Not paid yet (planned expense)</span></label>
     <div class="col-span-2 mt-1 flex items-center justify-between gap-2"><button type="button" id="tx-delete" class="btn btn-ghost text-neg hidden" data-confirm data-action="<?= e(url('/do/transaction-delete')) ?>" data-fields="{}" data-title="Delete transaction?" data-message="This permanently removes it and updates your balances." data-label="Delete"><?= icon('trash-2', 'size-4') ?> Delete</button><button type="submit" class="btn btn-primary ml-auto" data-tx-submit>Add transaction</button></div>
   </form></div></dialog>
+<dialog id="remark-dialog" class="modal modal-sm" aria-labelledby="remark-t"><div class="modal-body">
+  <div class="mb-3 flex items-start justify-between gap-4"><h2 id="remark-t" class="text-xl font-semibold tracking-tight">Remark</h2><button type="button" class="btn btn-ghost btn-sm -mr-2" data-close aria-label="Close"><?= icon('x', 'size-4') ?></button></div>
+  <p class="mb-3 text-sm text-mute" id="remark-for"></p>
+  <form method="post" action="<?= e(url('/do/transaction-remarks')) ?>" class="grid gap-3"><?= csrf_field() ?><input type="hidden" name="_back" value="<?= e(current_url()) ?>"><input type="hidden" name="id" value="">
+    <div><label class="label" for="remark-in">Remark</label><input id="remark-in" class="input" name="remarks" maxlength="500" placeholder="e.g. Diwali gift for Neha" autocomplete="off"></div>
+    <div class="flex justify-end gap-2"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn btn-primary">Save remark</button></div></form></div></dialog>
 <?php return (string) ob_get_clean();
 }
 
@@ -265,7 +273,7 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
 <meta name="pills-src" content="<?= e(asset('pills.svg')) ?>"><link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <script>try{var d=document.documentElement;d.classList.add('js');var t=localStorage.getItem('mfnc-theme')||d.dataset.theme;if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');var p=localStorage.getItem('mfnc-palette');if(p)d.setAttribute('data-palette',p);<?php if ($s): ?>if(!sessionStorage.getItem('mfnc-seen')||sessionStorage.getItem('mfnc-reload'))d.classList.add('has-splash');<?php endif; ?>}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('promptbar.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><link rel="stylesheet" href="<?= e(asset('c.css')) ?>"><script src="<?= e(asset('voice.js')) ?>"></script><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('promptbar.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><link rel="stylesheet" href="<?= e(asset('c.css')) ?>"><script src="<?= e(asset('voice.js')) ?>"></script><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>"><link rel="stylesheet" href="<?= e(asset('import.css')) ?>">
 </head>
 <body class="bg-page text-ink antialiased<?= !empty($GLOBALS['__dock']) ? ' has-dock' : '' ?>" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-card">Skip to content</a>
@@ -360,7 +368,7 @@ function layout_end(): void {
     }
     if (!empty($GLOBALS['__dock'])) { echo $GLOBALS['__dock']; }
     if ($x['intro']) { echo intro_html(); }
-    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('motion.js')) . '"></script><script src="' . e(asset('statusmark.js')) . '"></script><script src="' . e(asset('promptbar.js')) . '"></script><script src="' . e(asset('pillsmark.js')) . '" defer></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script></body></html>';
+    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('motion.js')) . '"></script><script src="' . e(asset('statusmark.js')) . '"></script><script src="' . e(asset('promptbar.js')) . '"></script><script src="' . e(asset('pillsmark.js')) . '" defer></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script><script src="' . e(asset('import.js')) . '" defer></script></body></html>';
 }
 function render_error(int $code, string $title, string $msg): void {
     http_response_code($code);
@@ -385,7 +393,7 @@ function tx_list(array $s, array $rows, string $empty = 'Nothing here yet.'): st
     foreach ($rows as $t) {
         $sub = $t['type'] === 'transfer' ? ($acc[$t['account_id']] ?? '') . ' → ' . ($acc[$t['to_account_id']] ?? '') : cat_path($s, $t['category_id'] ? (int) $t['category_id'] : null);
         $o .= '<li class="flex items-center gap-3 py-3"><span class="grid size-10 shrink-0 place-items-center rounded-2xl bg-soft text-ink">' . icon(['income' => 'arrow-down-left', 'refund' => 'undo-2', 'transfer' => 'arrow-left-right', 'adjustment' => 'sliders-horizontal'][$t['type']] ?? 'arrow-up-right', 'size-4') . '</span>'
-            . '<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">' . e(tx_label($s, $t)) . '</p><p class="truncate text-xs text-mute">' . e(date_label($t['date'])) . ' · ' . e($sub) . ($t['status'] === 'planned' ? ' · Planned' : '') . '</p></div>'
+            . '<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">' . e(tx_label($s, $t)) . '</p><p class="truncate text-xs text-mute">' . e(date_label($t['date'])) . ' · ' . e($sub) . ($t['status'] === 'planned' ? ' · Planned' : '') . '</p>' . tx_extra_line($t) . '</div>'
             . '<span class="num shrink-0 text-sm font-semibold ' . amount_class($t) . '">' . e(signed_amount($t)) . '</span></li>';
     }
     return $o . '</ul>';

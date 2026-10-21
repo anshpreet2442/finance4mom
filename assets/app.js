@@ -73,10 +73,11 @@
     if (ds && ds.date) { form.elements['date'].value = ds.date; }
     if (ds && ds.planned) { form.elements['planned'].checked = true; }
     if (data) {
-      ['id', 'amount', 'date', 'account_id', 'to_account_id', 'description', 'payment_method', 'notes', 'refund_of', 'fund_goal_id'].forEach(function (k) { var el = form.elements[k]; if (el && data[k] != null) el.value = data[k]; });
+      ['id', 'amount', 'date', 'account_id', 'to_account_id', 'description', 'payment_method', 'notes', 'remarks', 'refund_of', 'fund_goal_id'].forEach(function (k) { var el = form.elements[k]; if (el && data[k] != null) el.value = data[k]; });
       var cat = form.elements['category_id']; if (cat && data.category_id != null) cat.value = data.category_id;
       var p = form.elements['planned']; if (p) p.checked = data.status === 'planned';
     }
+    document.dispatchEvent(new CustomEvent('mfnc:txopen', { detail: data || {} }));
     openDialog($('#tx-dialog'), origin);
   }
   function initForm() { form = $('#tx-form'); if (form) setType('expense'); }
