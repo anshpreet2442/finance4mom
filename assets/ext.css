@@ -137,3 +137,10 @@ html, body { overflow-x: clip; }
 .ai-stopped { margin-top: .4rem; font-size: .8rem; color: var(--mute); font-style: italic; }
 .ai-steps-done { margin-bottom: .5rem; font-size: .8rem; color: var(--mute); } .ai-steps-done > summary { cursor: pointer; min-height: 28px; display: flex; align-items: center; } .ai-steps-done[open] > summary { margin-bottom: .4rem; }
 .ai-msg__b > .ai-status { display: block; }
+/* plugin shop */
+.shop-ic { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--soft); color: var(--ink); flex: none; } .shop-ic--lg { width: 52px; height: 52px; border-radius: 16px; }
+.shop-card.is-owned { box-shadow: var(--e1), 0 0 0 2px color-mix(in srgb, var(--in, #3f7a0d) 55%, transparent); } .shop-card.is-locked .shop-ic { opacity: .75; }
+.shop-card .btn { min-height: 44px; } .shop-card .chip { min-height: 36px; }
+dialog [data-topup-preset] { min-height: 40px; }
+@media print { body * { visibility: hidden; } #receipt, #receipt * { visibility: visible; } #receipt { position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; } }
+#wallet .btn, [data-open="#topup"] { min-height: 44px; }

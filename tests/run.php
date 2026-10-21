@@ -485,5 +485,7 @@ $fixed = ai_fix_content([['type' => 'text', 'text' => 'hi'], ['type' => 'tool_us
 eq(json_encode($fixed[1]['input']), '{}', 'an empty tool input is re-sent as {} (not [])');
 eq(json_encode($fixed[2]['input']), '{"month":"2026-10"}', 'a filled tool input is untouched');
 
+require __DIR__ . '/telegram_tests.php';
+
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);

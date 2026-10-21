@@ -203,7 +203,7 @@ function nav_items(array $u): array {
         ['reports', '/reports', 'Reports & Insights', 'chart-line'],
     ];
     if (site_setting('ai_enabled', '0') === '1' || $u['role'] === 'admin') { $items[] = ['ai', '/ai', 'AI advisor', 'pills']; }
-    foreach (array_keys(features()) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $items[] = ['plans', '/plans', 'Plans & wallet', 'credit-card']; break; } }
+    $items[] = ['plugins', '/plugins', 'Plugins', 'puzzle'];
     $items[] = ['settings', '/settings', 'Settings', 'settings'];
     if ($u['role'] === 'admin') { $items[] = ['admin', '/admin', 'Admin panel', 'shield-check']; }
     return $items;

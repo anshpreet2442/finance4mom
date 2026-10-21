@@ -142,3 +142,11 @@
   .prompt-bar--app .prompt-bar__effort-track { height: 32px; margin-top: 12px; } .prompt-bar--app .prompt-bar__effort-thumb { height: 38px; top: -3px; width: 18px; margin-left: -9px; }
 }
 @media (prefers-reduced-motion: reduce) { .prompt-bar__chip-spin { animation-duration: 2.4s; } }
+.prompt-bar__bar { min-width: 0; }
+.prompt-bar__pick { min-width: 0; } .prompt-bar__pick > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) {
+  .prompt-bar--app .prompt-bar__tool { width: 40px; height: 44px; }
+  .prompt-bar--app .prompt-bar__pick { flex: 0 1 auto; padding: 0 8px; }
+  .prompt-bar--app .prompt-bar__pick:first-of-type { max-width: 46%; }
+  .prompt-bar--app .prompt-bar__send { width: 44px; margin-left: 2px; }
+}

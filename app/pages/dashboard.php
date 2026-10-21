@@ -20,6 +20,7 @@ function page_dashboard(): void {
     echo '<div class="mt-5 px-4 lg:mt-0 lg:px-0">';
     $hour = (int) date('G'); $hello = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
     echo '<div class="hidden lg:block">'; page_header($hello . ', ' . explode(' ', $u['name'])[0], 'Your money in ' . month_label($month)); echo '</div>';
+    echo telegram_dashboard_prompt($u);
     if ($isEmpty) { echo '<div class="mb-5">' . empty_state("Let's get started", 'Add your first income or expense with <strong>Add transaction</strong>, set up bills and savings goals, or load sample data from Settings to explore.') . '</div>'; }
     ?>
 <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">

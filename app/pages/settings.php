@@ -46,6 +46,7 @@ function page_settings(): void {
         ['name' => 'sms_alerts', 'label' => 'Text me payment links and reminders' . ($sc['enabled'] ? '' : ' (not enabled by the administrator yet)'), 'type' => 'checkbox', 'value' => (bool) $al['sms_alerts']],
         ['name' => 'phone', 'label' => 'Mobile number', 'type' => 'tel', 'value' => (string) $al['phone'], 'placeholder' => '+919876543210', 'autocomplete' => 'tel', 'hint' => 'Used only for alerts. Include the country code.'],
     ], 'Save alerts'); card_close();
+    card_open('Connections', 'Link other apps to your account.'); echo '<div id="connections"><p class="mb-2 flex items-center gap-2 text-sm font-semibold">' . icon('send', 'size-4') . 'Telegram</p>' . telegram_connect_card($u) . '</div>'; card_close();
     if (feature_on($u, 'dock')) { card_open('Dock', 'Pin pages to the dock at the bottom of the screen on desktop.'); echo dock_manager($u); card_close(); }
     card_open('Profile & security');
     echo simple_form('profile-save', [['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $u['name']]], 'Save name') . '<p class="mt-3 text-xs text-mute">Signed in as ' . e($u['email']) . '</p><hr class="my-5 border-line">'

@@ -32,6 +32,11 @@ const READONLY_POST = ['dues-pay', 'logout', 'theme-quick', 'prefs-save', 'profi
 if (method() === 'POST' && $path === '/webhooks/payu') {
     header('Content-Type: text/plain; charset=utf-8'); [$code, $msg] = handle_payu_webhook((string) file_get_contents('php://input'), request_headers()); http_response_code($code); echo $msg; exit;
 }
+// ---- Telegram bot webhook: public, secret-header checked, no session / CSRF, answers at once and then does the work ----
+if ($path === '/webhooks/telegram') {
+    if (method() !== 'POST') { http_response_code(405); header('Allow: POST'); exit; }
+    tg_handle_request((string) file_get_contents('php://input', false, null, 0, TG_MAX_BODY + 1), request_headers()); exit;
+}
 // ---- passkeys (WebAuthn) JSON endpoints ----
 if (method() === 'POST' && str_starts_with($path, '/webauthn/')) { handle_webauthn($path); }
 // ---- offline sync: JSON batch from the browser / service worker ----
@@ -89,8 +94,8 @@ $routes = [
     '/analysis' => 'page_analysis', '/accounts' => 'page_accounts', '/dues' => 'page_dues', '/dues/return' => 'page_dues_return', '/admin/billing' => 'page_admin_billing',
     '/manifest.webmanifest' => 'page_manifest', '/api/pulse' => 'page_pulse', '/sw.js' => 'page_sw', '/offline' => 'page_offline', '/credits' => 'page_credits',
     '/reports' => 'page_reports', '/settings' => 'page_settings', '/settings/backup' => 'page_backup',
-    '/ai' => 'page_ai', '/ai/actions' => 'page_ai_actions', '/ai/settings' => 'page_ai_settings', '/ai/avatar' => 'page_ai_avatar', '/plans' => 'page_plans', '/welcome' => 'page_welcome',
-    '/admin/features' => 'page_admin_features', '/admin/ai' => 'page_admin_ai', '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
+    '/ai' => 'page_ai', '/ai/actions' => 'page_ai_actions', '/ai/settings' => 'page_ai_settings', '/ai/avatar' => 'page_ai_avatar', '/plans' => 'page_plans', '/plugins' => 'page_plugins', '/plugins/receipt' => 'page_plugin_receipt', '/admin/plugins' => 'page_admin_plugins', '/welcome' => 'page_welcome',
+    '/admin/telegram' => 'page_admin_telegram', '/api/telegram' => 'page_api_telegram', '/admin/features' => 'page_admin_features', '/admin/ai' => 'page_admin_ai', '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
     '/admin' => 'page_admin', '/admin/users' => 'page_admin_users', '/admin/settings' => 'page_admin_settings', '/admin/activity' => 'page_admin_activity', '/admin/system' => 'page_admin_system',
 ];
 if (!in_array(method(), ['GET', 'HEAD'], true)) { http_response_code(405); exit; }

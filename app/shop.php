@@ -97,8 +97,11 @@ function shop_meta(): array { return shop_json('shop_meta'); }
 function shop_packs(): array {
     $o = []; foreach (shop_json('shop_packs') as $r) { if (!is_array($r) || !preg_match('/^[a-z][a-z0-9_]{1,24}$/', (string) ($r['key'] ?? ''))) { continue; } $price = (int) ($r['price'] ?? 0); $credit = (int) ($r['credit'] ?? 0);
         if ($price > 0 && $credit > 0) { $o[$r['key']] = ['key' => 'pack_' . $r['key'], 'label' => mb_substr((string) ($r['label'] ?? 'AI pack'), 0, 60), 'desc' => mb_substr((string) ($r['desc'] ?? ''), 0, 200), 'price' => $price, 'credit' => $credit, 'hidden' => !empty($r['hidden'])]; } }
-    if (!$o && site_setting('shop_packs_seeded', '') === '') { return ['small' => ['key' => 'pack_small', 'label' => 'AI usage pack · 500', 'desc' => 'Adds ₹550 of AI credit to your wallet (10% bonus).', 'price' => 50000, 'credit' => 55000, 'hidden' => false], 'big' => ['key' => 'pack_big', 'label' => 'AI usage pack · 1000', 'desc' => 'Adds ₹1,200 of AI credit to your wallet (20% bonus).', 'price' => 100000, 'credit' => 120000, 'hidden' => false]]; }
+    if (!$o && site_setting('shop_packs_seeded', '') === '') { return shop_default_packs(); }
     return $o;
+}
+function shop_default_packs(): array {
+    return ['small' => ['key' => 'pack_small', 'label' => 'AI usage pack · 500', 'desc' => 'Adds ₹550 of AI credit to your wallet (10% bonus).', 'price' => 50000, 'credit' => 55000, 'hidden' => false], 'big' => ['key' => 'pack_big', 'label' => 'AI usage pack · 1000', 'desc' => 'Adds ₹1,200 of AI credit to your wallet (20% bonus).', 'price' => 100000, 'credit' => 120000, 'hidden' => false]];
 }
 /** One shop card per purchasable thing. kind: feature | model | pack. state: free | owned | expired | locked | payg. */
 function shop_catalog(?array $u, bool $withHidden = false): array {
@@ -111,8 +114,8 @@ function shop_catalog(?array $u, bool $withHidden = false): array {
             'state' => $state, 'until' => $until, 'hidden' => $hidden, 'sort' => (int) ($mt['sort'] ?? ($i * 10)), 'buyable' => $c['mode'] === 'paid' && $c['price'] > 0, 'admin_included' => $u && is_exempt_user($u)];
         $i++;
     }
-    foreach (shop_packs() as $p) { $mt = is_array($meta[$p['key']] ?? null) ? $meta[$p['key']] : []; $hidden = $p['hidden'] || !empty($mt['hidden']); if ($hidden && !$withHidden) { continue; }
-        $items[] = ['key' => $p['key'], 'kind' => 'pack', 'name' => $p['label'], 'desc' => $p['desc'], 'mode' => 'pack', 'price' => $p['price'], 'days' => 0, 'credit_micro' => $p['credit'] * 10000, 'state' => 'pack', 'until' => null, 'hidden' => $hidden, 'sort' => (int) ($mt['sort'] ?? 900), 'buyable' => true, 'admin_included' => false]; }
+    $i = 0; foreach (shop_packs() as $p) { $mt = is_array($meta[$p['key']] ?? null) ? $meta[$p['key']] : []; $hidden = $p['hidden'] || !empty($mt['hidden']); if ($hidden && !$withHidden) { continue; }
+        $items[] = ['key' => $p['key'], 'kind' => 'pack', 'name' => (string) ($mt['name'] ?? '') ?: $p['label'], 'desc' => (string) ($mt['desc'] ?? '') ?: $p['desc'], 'mode' => 'pack', 'price' => $p['price'], 'days' => 0, 'credit_micro' => $p['credit'] * 10000, 'state' => 'pack', 'until' => null, 'hidden' => $hidden, 'sort' => (int) ($mt['sort'] ?? (900 + $i++)), 'buyable' => true, 'admin_included' => false]; }
     usort($items, fn($a, $b) => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]); return $items;
 }
 function shop_item(string $key): ?array { foreach (shop_catalog(null, true) as $it) { if ($it['key'] === $key) { return $it; } } return null; }
@@ -170,3 +173,76 @@ function shop_receipt_no(array $p): string { return 'R' . gmdate('ymd', strtotim
 function shop_receipt_email(int $uid, string $title, int $micro): void {
     try { notify_email($uid, 'shop.receipt', ['title' => $title, 'amount' => micro_to_inr($micro), 'link' => abs_url('/plugins')]); } catch (Throwable $e) { log_error($e); }
 }
+
+// ============================ POST handlers (person) ============================
+function do_shop_buy(array $u): string {
+    $key = in_str('key', 40); $nonce = in_str('nonce', 64); $r = shop_buy((int) $u['id'], $key, $nonce); $it = shop_item($key);
+    if ($r['status'] === 'already') { return 'Already done: ' . ($it['name'] ?? 'that plugin') . ' is yours.'; }
+    shop_receipt_email((int) $u['id'], shop_title($it ?? ['kind' => 'feature', 'name' => $key, 'days' => 0]), (int) (($it['price'] ?? 0) * 10000));
+    return ($it['name'] ?? 'Plugin') . ' is on' . ($r['until'] ? ' until ' . date_label((string) $r['until']) : '') . '. Receipt saved below.';
+}
+function do_shop_topup_buy(array $u): ?string {
+    $amt = in_money('amount', true, false, false, 'Amount'); if ($amt < 1000 || $amt > 5000000) { throw new UserError('Top up between ₹10 and ₹50,000.'); }
+    $id = shop_start_checkout((int) $u['id'], in_str('key', 40), 'wallet', $amt); $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below. Your purchase completes automatically once it is confirmed.';
+}
+function do_shop_card(array $u): ?string { $id = shop_start_checkout((int) $u['id'], in_str('key', 40), 'card'); $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below to unlock it.'; }
+function do_shop_pack(array $u): ?string { $id = shop_start_checkout((int) $u['id'], in_str('key', 40), 'card'); $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below to add the credit to your wallet.'; }
+
+// ============================ POST handlers (admin) ============================
+function shop_post_arr(string $k): array { $v = $_POST[$k] ?? []; return is_array($v) ? $v : []; }
+function shop_money(mixed $v, string $label): int { $v = trim((string) $v); if ($v === '') { return 0; } $p = parse_money($v); if ($p === null || $p > 5000000) { throw new UserError($label . ': enter an amount in rupees, up to ₹50,000.'); } return $p; }
+function do_admin_models_save(array $u): string {
+    $cur = ai_models_cfg(); $out = []; $state = shop_post_arr('state'); $name = shop_post_arr('name'); $tag = shop_post_arr('tag'); $mi = shop_post_arr('mult_in'); $mo = shop_post_arr('mult_out'); $th = shop_post_arr('thinking'); $vi = shop_post_arr('vision'); $price = shop_post_arr('price'); $days = shop_post_arr('days');
+    $new = trim((string) ($_POST['new_id'] ?? '')); $ids = array_keys($cur);
+    if ($new !== '') { if (!preg_match('/^claude-[a-z0-9.\-]{2,20}$/', $new)) { throw new UserError('A model id looks like claude-sonnet-5-5 (letters, digits, dots and dashes, up to 26 characters).'); } if (!in_array($new, $ids, true)) { $ids[] = $new; $state[$new] = 'hidden'; $name[$new] = trim((string) ($_POST['new_name'] ?? '')) ?: $new; } }
+    $prices = [];
+    foreach ($ids as $id) {
+        $s = (string) ($state[$id] ?? $cur[$id]['state'] ?? 'allowed'); if (!in_array($s, ['allowed', 'premium', 'hidden'], true)) { throw new UserError('Pick Allowed, Premium or Hidden for each model.'); }
+        $t = (string) ($th[$id] ?? 'adaptive'); if (!in_array($t, ['adaptive', 'budget', 'none'], true)) { throw new UserError('Unknown thinking mode.'); }
+        foreach ([['mult_in', $mi], ['mult_out', $mo]] as [$l, $arr]) { $v = trim((string) ($arr[$id] ?? '1')); if ($v === '' || !is_numeric($v) || (float) $v < 0 || (float) $v > 100) { throw new UserError('Price multipliers are numbers between 0 and 100, e.g. 1 or 1.5.'); } }
+        $pr = shop_money($price[$id] ?? '', 'Plugin price'); $dy = (int) ($days[$id] ?? 30); if ($dy < 1 || $dy > 366) { throw new UserError('Plugin days must be between 1 and 366.'); } if ($s === 'premium' && $pr <= 0) { throw new UserError(trim((string) ($name[$id] ?? $id)) . ' is premium, so it needs a plugin price.'); }
+        $out[$id] = ['state' => $s, 'name' => mb_substr(trim((string) ($name[$id] ?? '')) ?: $id, 0, 40), 'tag' => mb_substr(trim((string) ($tag[$id] ?? '')), 0, 24), 'mult_in' => round((float) ($mi[$id] ?? 1), 3), 'mult_out' => round((float) ($mo[$id] ?? 1), 3), 'thinking' => $t, 'vision' => !empty($vi[$id])];
+        $prices[$id] = [$pr, $dy];
+    }
+    $def = (string) ($_POST['default_model'] ?? ''); if (!isset($out[$def]) || $out[$def]['state'] !== 'allowed') { throw new UserError('The default model must be one that is Allowed (free for everyone).'); }
+    foreach ($out as $id => $m) { if ($m['state'] === 'premium' || isset($cur[$id])) { [$pr, $dy] = $prices[$id]; if ($pr > 0) { set_setting('feat_' . model_feature($id) . '_price', (string) $pr); } set_setting('feat_' . model_feature($id) . '_days', (string) $dy); } }
+    set_setting('ai_models', json_encode($out, JSON_UNESCAPED_UNICODE)); set_setting('ai_model', $def); audit('admin.models', 'site', $def); return 'Models saved.';
+}
+function do_admin_efforts_save(array $u): string {
+    $eff = shop_post_arr('eff'); $mt = shop_post_arr('max_tokens'); $bd = shop_post_arr('budget'); $out = [];
+    foreach (AI_EFFORT_DEFAULT as $label => $d) {
+        $e = (string) ($eff[$label] ?? $d['effort']); if (!in_array($e, AI_API_EFFORTS, true)) { throw new UserError('Unknown effort level.'); } $m = (int) ($mt[$label] ?? 0); $b = (int) ($bd[$label] ?? 0);
+        if ($m < 200 || $m > 32000) { throw new UserError($label . ': max tokens must be between 200 and 32,000.'); } if ($b < 0 || $b > 30000) { throw new UserError($label . ': the thinking budget must be between 0 and 30,000.'); } $out[$label] = ['effort' => $e, 'max_tokens' => $m, 'budget' => $b];
+    }
+    $cmds = []; foreach (preg_split('/\r?\n/', (string) ($_POST['commands'] ?? '')) ?: [] as $ln) { if (trim($ln) === '') { continue; } $p = array_map('trim', explode('|', $ln, 3)); if (count($p) < 3 || !preg_match('/^[a-z][a-z0-9_-]{1,15}$/', $p[0]) || $p[2] === '') { throw new UserError('Slash commands look like: key | short description | instruction. The key is lowercase letters, digits, - or _. Problem line: ' . mb_substr($ln, 0, 40)); } $cmds[] = ['key' => $p[0], 'description' => mb_substr($p[1], 0, 60), 'prompt' => mb_substr($p[2], 0, 600)]; }
+    set_setting('ai_efforts', json_encode($out)); set_setting('ai_commands', json_encode($cmds, JSON_UNESCAPED_UNICODE)); set_setting('ai_web_search', !empty($_POST['ai_web_search']) ? '1' : '0'); audit('admin.efforts', 'site'); return 'Effort map saved.';
+}
+function do_admin_catalog_save(array $u): string {
+    $items = shop_catalog(null, true); $mode = shop_post_arr('mode'); $price = shop_post_arr('price'); $days = shop_post_arr('days'); $unit = shop_post_arr('unit'); $credit = shop_post_arr('credit'); $hidden = shop_post_arr('hidden'); $sort = shop_post_arr('sort'); $name = shop_post_arr('name'); $desc = shop_post_arr('desc');
+    $rows = []; $meta = []; $packs = shop_json('shop_packs'); $seed = $packs ? [] : shop_default_packs();
+    foreach ($items as $it) {
+        $k = $it['key']; $label = $it['name']; $pr = shop_money($price[$k] ?? '', $label . ' price'); $meta[$k] = ['name' => mb_substr(trim((string) ($name[$k] ?? '')), 0, 60), 'desc' => mb_substr(trim((string) ($desc[$k] ?? '')), 0, 200), 'hidden' => !empty($hidden[$k]) ? 1 : 0, 'sort' => max(-9999, min(9999, (int) ($sort[$k] ?? 0)))];
+        if ($it['kind'] === 'pack') { $cr = shop_money($credit[$k] ?? '', $label . ' credit'); if (empty($hidden[$k]) && ($pr <= 0 || $cr <= 0)) { throw new UserError($label . ' needs a price and a credit amount.'); } $rows[$k] = ['pack', $pr, $cr]; continue; }
+        $m = (string) ($mode[$k] ?? $it['mode']); if (!in_array($m, features()[$k]['modes'] ?? ['free'], true)) { throw new UserError($label . ' cannot be sold that way.'); } $dy = (int) ($days[$k] ?? 30); if ($dy < 1 || $dy > 366) { throw new UserError($label . ': period must be 1 to 366 days.'); }
+        if ($m === 'paid' && $pr <= 0 && empty($hidden[$k])) { throw new UserError($label . ' is marked paid, so it needs a price (or hide it).'); } $un = in_array('payg', features()[$k]['modes'], true) ? post_micro_val($unit[$k] ?? '') : null; $rows[$k] = [$m, $pr, $dy, $un];
+    }
+    foreach ($rows as $k => $r) {
+        if ($r[0] === 'pack') { continue; } [$m, $pr, $dy, $un] = $r; set_setting("feat_{$k}_mode", $m); set_setting("feat_{$k}_price", (string) $pr); set_setting("feat_{$k}_days", (string) $dy); if ($un !== null) { set_setting("feat_{$k}_unit", (string) $un); }
+    }
+    $list = []; foreach (($packs ?: array_values($seed)) as $p) { $full = 'pack_' . preg_replace('/^pack_/', '', (string) $p['key']); if (!isset($rows[$full])) { $list[] = $p; continue; } $p['key'] = preg_replace('/^pack_/', '', (string) $p['key']); $p['price'] = $rows[$full][1]; $p['credit'] = $rows[$full][2]; $p['hidden'] = !empty($meta[$full]['hidden']); $list[] = $p; }
+    if ($packs || $seed) { set_setting('shop_packs', json_encode($list, JSON_UNESCAPED_UNICODE)); set_setting('shop_packs_seeded', '1'); }
+    set_setting('shop_meta', json_encode($meta, JSON_UNESCAPED_UNICODE)); audit('admin.catalog', 'site'); return 'Catalog saved.';
+}
+function post_micro_val(mixed $v): int { $v = trim((string) $v); if ($v === '') { return 0; } $p = parse_money($v); if ($p === null) { throw new UserError('Enter a valid per-use price.'); } return $p * 10000; }
+function do_admin_plugin_add(array $u): string {
+    $k = strtolower(trim(in_str('key', 25))); $label = in_line('label', 60, true, 'Name'); if (!preg_match('/^[a-z][a-z0-9_]{1,24}$/', $k) || str_starts_with($k, 'mdl_') || str_starts_with($k, 'pack_')) { throw new UserError('The key is lowercase letters, digits and underscores, starting with a letter (2 to 25 characters).'); }
+    if (isset(FEATURES[$k])) { throw new UserError('That key is already a built-in plugin.'); } $c = shop_json('shop_custom'); foreach ($c as $r) { if (($r['key'] ?? '') === $k) { throw new UserError('That key already exists.'); } }
+    if (count($c) >= 40) { throw new UserError('That is plenty of plugins already.'); } $c[] = ['key' => $k, 'label' => $label, 'desc' => in_str('desc', 200, false)]; set_setting('shop_custom', json_encode($c, JSON_UNESCAPED_UNICODE)); audit('admin.plugin.add', $k); return 'Plugin added. Set its mode and price in the catalog above.';
+}
+function do_admin_plugin_remove(array $u): string { $k = in_str('key', 25); $c = array_values(array_filter(shop_json('shop_custom'), fn($r) => ($r['key'] ?? '') !== $k)); set_setting('shop_custom', json_encode($c, JSON_UNESCAPED_UNICODE)); audit('admin.plugin.remove', $k); return 'Plugin removed.'; }
+function do_admin_pack_add(array $u): string {
+    $k = strtolower(trim(in_str('key', 25))); if (!preg_match('/^[a-z][a-z0-9_]{1,24}$/', $k)) { throw new UserError('The key is lowercase letters, digits and underscores.'); } $price = shop_money($_POST['price'] ?? '', 'Price'); $credit = shop_money($_POST['credit'] ?? '', 'Credit'); if ($price <= 0 || $credit <= 0) { throw new UserError('Enter a price and the credit it gives.'); }
+    $c = shop_json('shop_packs') ?: array_map(fn($p) => ['key' => preg_replace('/^pack_/', '', $p['key'])] + $p, array_values(shop_default_packs())); foreach ($c as $r) { if (($r['key'] ?? '') === $k) { throw new UserError('That key already exists.'); } }
+    $c[] = ['key' => $k, 'label' => in_line('label', 60, true, 'Name'), 'desc' => 'Adds ' . micro_to_inr($credit * 10000) . ' of AI credit to your wallet.', 'price' => $price, 'credit' => $credit, 'hidden' => false]; set_setting('shop_packs', json_encode($c, JSON_UNESCAPED_UNICODE)); set_setting('shop_packs_seeded', '1'); audit('admin.pack.add', $k); return 'Pack added.';
+}
+function do_admin_pack_remove(array $u): string { $k = in_str('key', 25); $c = array_values(array_filter(shop_json('shop_packs'), fn($r) => ($r['key'] ?? '') !== $k)); set_setting('shop_packs', json_encode($c, JSON_UNESCAPED_UNICODE)); set_setting('shop_packs_seeded', '1'); audit('admin.pack.remove', $k); return 'Pack removed.'; }

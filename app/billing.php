@@ -81,6 +81,7 @@ function notify_charge(int $uid, int $chargeId, string $kind, ?array $c = null):
     $body = $kind === 'new' ? fmt_inr(charge_payable($c)) . ' due on ' . date_label($c['due_date']) . '.' : fmt_inr(charge_payable($c)) . ' was due on ' . date_label($c['due_date']) . '. Pay it on the Dues page.';
     $fresh = run('INSERT INTO {notifications} (user_id,dedupe_key,kind,title,body,due_date) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title), body=VALUES(body)', [$uid, "charge:$chargeId:$kind", $kind === 'new' ? 'due' : 'overdue', $title, $body, $c['due_date']]);
     if ($fresh === 1 && $c['status'] === 'pending' && sms_cfg()['auto']) { sms_charge_alert($uid, $c, $kind === 'new' ? 'charge.new' : 'charge.overdue'); } // first time only: the notification row is the de-duplication
+    if ($fresh === 1 && $c['status'] === 'pending' && function_exists('tg_notify')) { tg_notify($uid, $kind === 'new' ? 'charge.new' : 'charge.overdue', ['title' => $c['title'], 'amount' => fmt_inr(charge_payable($c)), 'due_date' => date_label($c['due_date']), 'link' => abs_url('/dues?charge=' . (int) $chargeId)], "charge:$chargeId:$kind"); } // Telegram reminder for people who opted in
 }
 /** 0 = fine, 1 = reminder, 2 = restricted (read-only), 3 = locked (Dues page only). Admins and exempt users are always 0. */
 function billing_level(array $user, ?string $today = null): int {

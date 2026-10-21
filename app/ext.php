@@ -97,7 +97,7 @@ function create_self_charge(int $uid, string $title, int $amountPaise, array $ex
 function dock_pages(bool $admin = false): array {
     $p = ['dashboard' => ['Dashboard', '/', 'layout-dashboard'], 'accounts' => ['Accounts', '/accounts', 'landmark'], 'transactions' => ['Transactions', '/transactions', 'arrow-left-right'], 'budget' => ['Budget', '/budget', 'calendar-check'],
         'goals' => ['Goals', '/goals', 'goal'], 'house' => ['House', '/house', 'house'], 'big' => ['Big purchases', '/big-purchases', 'shopping-cart'], 'bills' => ['Bills', '/bills', 'bell-ring'], 'yearly' => ['Yearly', '/yearly', 'calendar-clock'],
-        'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'pills'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
+        'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'pills'], 'plugins' => ['Plugins', '/plugins', 'puzzle'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
     $ai = site_setting('ai_enabled', '0') === '1' || $admin; if (!$ai) { unset($p['ai']); }
     $paidAny = false; foreach (array_keys(features()) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $paidAny = true; } } if (!$paidAny) { unset($p['plans']); }
     if ($admin) { $p['admin'] = ['Admin', '/admin', 'shield-check']; }
@@ -108,7 +108,7 @@ function dock_pages(bool $admin = false): array {
 function dock_pins(int $uid): array { return array_column(all('SELECT page_key FROM {dock_pins} WHERE user_id=? ORDER BY sort, page_key', [$uid]), 'page_key'); }
 /** Nav key used by layout_start() => dock page key. */
 function dock_key_for(string $active): ?string {
-    $m = ['dashboard' => 'dashboard', 'accounts' => 'accounts', 'transactions' => 'transactions', 'budget' => 'budget', 'goals' => 'goals', 'house' => 'house', 'big' => 'big', 'big-purchases' => 'big', 'bills' => 'bills', 'yearly' => 'yearly', 'analysis' => 'analysis', 'dues' => 'dues', 'reports' => 'reports', 'ai' => 'ai', 'plans' => 'plans', 'settings' => 'settings', 'admin' => 'admin'];
+    $m = ['dashboard' => 'dashboard', 'accounts' => 'accounts', 'transactions' => 'transactions', 'budget' => 'budget', 'goals' => 'goals', 'house' => 'house', 'big' => 'big', 'big-purchases' => 'big', 'bills' => 'bills', 'yearly' => 'yearly', 'analysis' => 'analysis', 'dues' => 'dues', 'reports' => 'reports', 'ai' => 'ai', 'plugins' => 'plugins', 'plans' => 'plans', 'settings' => 'settings', 'admin' => 'admin'];
     return $m[$active] ?? null;
 }
 /** The dock itself (rendered once in the page shell; hidden by CSS below the desktop breakpoint). */

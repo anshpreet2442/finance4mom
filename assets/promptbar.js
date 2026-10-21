@@ -76,7 +76,8 @@
     function armed() { return st.busy || canSend(); }
     function level() { return efforts[st.effortIndex] || ''; }
     function maxed() { return efforts.length > 1 && st.effortIndex === efforts.length - 1; }
-    function focusInput() { try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); } }
+    var quiet = false;
+    function focusInput() { quiet = true; try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); } quiet = false; }
 
     // ---------- send glyph morph ----------
     var t = M.value(st.busy ? 1 : 0), dir = st.busy ? 1 : -1;
@@ -231,7 +232,7 @@
 
     // ---------- events ----------
     input.addEventListener('input', function () { st.draft = input.value; typing.energy = Math.min(1.6, typing.energy + 0.22); typing.strokes = Math.min(4, typing.strokes + 1); st.dismissed = false; closeMenus(); st.active = 0; autosize(); sync(); });
-    input.addEventListener('focus', function () { if (st.plusOpen || st.modelOpen || st.effortOpen) { closeMenus(); sync(); } });
+    input.addEventListener('focus', function () { if (!quiet && (st.plusOpen || st.modelOpen || st.effortOpen)) { closeMenus(); sync(); } });
     input.addEventListener('keydown', function (e) {
       var k = openKind(), l = list();
       if (k && l.length && k !== 'effort') {
