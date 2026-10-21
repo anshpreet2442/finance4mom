@@ -142,3 +142,25 @@ Photos and receipt images can be read by anyone who has the AI advisor; PDFs nee
 
 ## Tests added in round 4
 `tests/round4_tests.php` (Apache and firewall simulation, request validation like the real API, layout preview headers, wireframe SVG), `tests/round4_json_tests.php`, `tests/round4_docs_tests.php`; all run from `tests/run.php`.
+
+## Round 5: account menu, voice assistant, progress rings
+
+### Account menu and "Do not disturb"
+The profile area of the top bar (and the avatar on the phone header and in the drawer) opens a menu that grows out of the button (`assets/accountmenu.js`, a port of the KokonutUI Account Menu; the code is `app/acctmenu.php`).
+* **Status**: Online, Away or Do not disturb, stored per person (`preferences.presence`, schema v12). Do not disturb means: no pop-up for background events, no red dot on the bell, and no e-mail, SMS or Telegram reminders **except overdue payments and security messages** (`DND_CRITICAL`). A small coloured dot on every avatar shows the state.
+* **Theme**: Light, Dark or System (System follows the device); it uses the same storage as the quick toggle. The colour palette (ember / lime) in Settings is separate.
+* The list only contains pages the person can open (Admin for administrators, Share links only with the plugin, AI actions only with the advisor...). **Sign out** is hold-to-confirm (mouse, touch, Enter or Space) and posts to `/do/logout` with the CSRF token. There is no "Switch account": this app has one account per sign-in.
+* Without JavaScript the avatar is a plain link to Settings and the drawer still has Sign out.
+
+### Voice assistant (every page)
+Pin **Voice** to the dock (Settings → Dock, or the pin button in the panel), press **Alt+V**, or use the round microphone button above the bottom bar on phones. Speak, check the transcript, Send. The answer is streamed and read aloud sentence by sentence, so you hear the first words before the answer is finished. Pressing the microphone, Escape or Close stops the voice at once.
+* **Listening**: ElevenLabs speech-to-text when the person has the Voice plugin and the admin has a key (recorded in the browser as small webm/opus pieces), otherwise the browser's Web Speech API, otherwise typing. **Speaking**: ElevenLabs per sentence with the low-latency model (Admin → Voice → "Fast model", default `eleven_flash_v2_5`; the next sentence is fetched while one plays), otherwise the device voice.
+* The transcript goes to the same advisor engine as the chat (`POST /ai/voice`): the same gates (switch, plan, monthly budget, wallet), tools, previews and metering. Cards and previews appear in the panel; **nothing is applied until you tap Apply**. Spoken questions and answers are saved in the chat history with a small microphone badge; **raw audio is never stored** (it lives in the browser tab and is sent only to the speech-to-text provider when ElevenLabs is the engine).
+* **The microphone needs HTTPS** (or localhost). On an insecure page the panel says so and offers typing. The response header `Permissions-Policy: microphone=(self)` allows it for this site only.
+* Streaming from the Anthropic API uses server-sent events (`ai_http_stream`); with `MFNC_DEBUG=1` the browser console prints `[mf-voice] latency {...}` (speech end to text, send to first token, first token to first audio) and the PHP log gets a `[voice-latency]` line. Not verified against a real key here; the mock transport and local stand-ins (`tests/anthropic_sse_mock.php`, `tests/elevenlabs_mock.php`) cover the whole path.
+
+### Progress rings
+`ring()` (`app/ring.php`) and `assets/ring.js` are a port of MagicUI's animated circular progress bar: the same SVG geometry (r 45, stroke 10, round caps, 12 o'clock start), a 1 s ease on `stroke-dasharray`, animate-from-zero when first seen, instant under reduced motion, `role="progressbar"`. Percentages are worked out on the server; a ring over its limit shows the real value (112 %) in red but never draws more than a full circle. Limit rings turn amber from 85 % and red above 100 %. They appear on the dashboard widgets, goals, purchases, sinking funds, the expense categories, Plans and Plugins (AI budget, voice limits, wallet), the AI chat header, the import preview and the import upload. Declarative use: `<div data-ring data-value="72"></div>`; script use: `mfRing(el, {value, max, primary, secondary, size, text})`.
+
+### Tests added in round 5
+`tests/round5_f_tests.php` (rings, menu items per role and feature, presence and Do not disturb, voice routing and turns, streaming against `tests/anthropic_sse_mock.php`, no audio stored) and `tests/js/*.test.js` (run automatically when `node` exists).
