@@ -17,7 +17,8 @@ RedirectMatch 404 ^/(.*/)?(tools|docs)/
 
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "DENY"
+  # PHP sends X-Frame-Options itself (DENY, or SAMEORIGIN for the layout preview); this is only the default for static files
+  Header always setifempty X-Frame-Options "DENY"
   <FilesMatch "\.(css|js|svg)$">
     Header set Cache-Control "public, max-age=2592000"
   </FilesMatch>

@@ -204,7 +204,7 @@ function tg_ai_message(int $chat, array $u, array $link, string $text, ?string $
         try {
             for ($n = 0; $n < $ac['max_steps']; $n++) {
                 tg_typing($chat);
-                $r = tg_ai_call($u, $system, $messages); $content = $r['content'] ?? []; $uses = [];
+                $r = tg_ai_call($u, $system, $messages); $content = ai_fix_content($r['content'] ?? []); $uses = [];
                 foreach ($content as $b) { if (($b['type'] ?? '') === 'text' && trim((string) $b['text']) !== '') { $items[] = ['text', (string) $b['text']]; $prose .= (string) $b['text'] . "\n"; } elseif (($b['type'] ?? '') === 'tool_use') { $uses[] = $b; } }
                 if (($r['stop_reason'] ?? '') !== 'tool_use' || !$uses) { break; }
                 $messages[] = ['role' => 'assistant', 'content' => $content]; $results = [];
