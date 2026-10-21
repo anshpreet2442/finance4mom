@@ -1,5 +1,5 @@
 <?php
-// Minimal stand-in for POST /v1/messages with "stream": true (php -S 127.0.0.1:8097 tests/anthropic_sse_mock.php).
+// Minimal stand-in for POST /v1/messages with "stream": true (php -S 127.0.0.1:8095 tests/anthropic_sse_mock.php).
 // The first user text picks the behaviour: "tool" streams a tool_use, "error400" answers a JSON error, "cut" ends the stream without message_stop, anything else streams text.
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH); if ($path !== '/v1/messages' || $_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(404); echo '{}'; exit; }
 $b = json_decode((string) file_get_contents('php://input'), true) ?: []; $first = $b['messages'][0]['content'] ?? ''; $first = is_array($first) ? json_encode($first) : (string) $first;

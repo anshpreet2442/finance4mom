@@ -106,10 +106,10 @@ $st2 = ai_sse_new(); $got2 = []; foreach (str_split($sse, 7) as $piece) { ai_sse
 $st3 = ai_sse_new(); ai_sse_feed($st3, "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n"); eq($st3['error']['type'], 'overloaded_error', 'an error event is recorded'); $st4 = ai_sse_new(); ai_sse_feed($st4, "data: not json\n\ndata: [DONE]\n\n\r\n"); eq($st4['blocks'], [], 'garbage lines are ignored');
 $st5 = ai_sse_new(); ai_sse_feed($st5, str_replace("\n", "\r\n", $sse)); eq(ai_sse_message($st5)['content'][0]['text'], 'Hello ₹5,000. Bye.', 'CRLF line endings work too');
 section('R5 voice: real streaming against a local API stand-in');
-$sseSrv = proc_open([PHP_BINARY, '-S', '127.0.0.1:8097', __DIR__ . '/anthropic_sse_mock.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $ssep); $up = $R5wait('127.0.0.1:8097');
+$sseSrv = proc_open([PHP_BINARY, '-S', '127.0.0.1:8095', __DIR__ . '/anthropic_sse_mock.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $ssep); $up = $R5wait('127.0.0.1:8095');
 check('the API stand-in is up', $up);
 if ($up) {
-    putenv('MFNC_AI_MOCK=0'); putenv('ANTHROPIC_API_KEY=test-key'); putenv('MFNC_AI_BASE=http://127.0.0.1:8097'); $pcs = []; $tm = [];
+    putenv('MFNC_AI_MOCK=0'); putenv('ANTHROPIC_API_KEY=test-key'); putenv('MFNC_AI_BASE=http://127.0.0.1:8095'); $pcs = []; $tm = [];
     $body = ['model' => 'claude-sonnet-5-5', 'max_tokens' => 200, 'messages' => [['role' => 'user', 'content' => 'hello']]];
     $r = ai_http($body, function ($t) use (&$pcs, &$tm) { $pcs[] = $t; $tm[] = microtime(true); });
     eq($pcs, ['Hello', ' there. This is ', 'the second sentence', '. And a third one.'], 'deltas arrive piece by piece'); check('...really incrementally (the server pauses between pieces)', count($tm) === 4 && ($tm[3] - $tm[0]) > 0.12, round(($tm[3] ?? 0) - ($tm[0] ?? 0), 3) . 's');
