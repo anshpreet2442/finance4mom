@@ -15,11 +15,11 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 ## B. Features
 - [x] B1 (builder) SwipeRow (vanilla JS port, assets/swiperow.js + css) on mobile list rows: transactions, bills, dues, goals, accounts. Delete/archive/pay actions via existing POST actions + CSRF
 - [x] B2 (builder) Dock (vanilla JS port) desktop only, user pins pages, persisted per user; pin/unpin UI
-- [ ] B3 Email system: send email on new payment, admin toggle; SMTP settings in admin; templates
-- [ ] B4 Twilio SMS: admin toggle + credentials, payment-link alerts, editable default template with {parameters}
-- [ ] B5 Landing page (/ for guests, e.g. /welcome) using StarBorder (vanilla JS port) and other components
-- [ ] B6 AI agent ("finance advisor/CA") with Claude API: onboarding Q&A -> context, agent suggests its own name, user names it, DiceBear avatar, tools to read app data, rich result components, multi-step calcs, live previews, actions with undo page, admin edits system prompt + model
-- [ ] B7 Admin billing: make features (dock, AI, etc.) free/paid/pay-as-you-go; AI token metering, per-user budget, top-up based limits
+- [x] B3 (builder) Email system: send email on new payment, admin toggle; SMTP settings in admin; templates
+- [x] B4 (builder) Twilio SMS: admin toggle + credentials, payment-link alerts, editable default template with {parameters}
+- [x] B5 (builder) Landing page (/ for guests, e.g. /welcome) using StarBorder (vanilla JS port) and other components
+- [x] B6 (builder) AI agent ("finance advisor/CA") with Claude API: onboarding Q&A -> context, agent suggests its own name, user names it, DiceBear avatar, tools to read app data, rich result components, multi-step calcs, live previews, actions with undo page, admin edits system prompt + model
+- [x] B7 (builder) Admin billing: make features (dock, AI, etc.) free/paid/pay-as-you-go; AI token metering, per-user budget, top-up based limits
 ## C. Mobile UI
 - [ ] C1 Improve mobile design across all pages (spacing, tap targets >=44px, bottom nav, sheets, safe-area)
 ## D. Designer proposals (Designer appends; Builder picks up)

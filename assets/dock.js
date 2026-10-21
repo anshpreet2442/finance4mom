@@ -80,7 +80,7 @@
       menu.addEventListener('keydown', function (e) { var bs = [].slice.call(menu.querySelectorAll('[role=menuitem]')), i = bs.indexOf(d.activeElement); if (e.key === 'ArrowDown') { e.preventDefault(); bs[(i + 1) % bs.length].focus(); } else if (e.key === 'ArrowUp') { e.preventDefault(); bs[(i - 1 + bs.length) % bs.length].focus(); } });
     }
   }
-  function boot() { init(d.getElementById('mf-dock')); }
+  function boot() { [].forEach.call(d.querySelectorAll('[data-dock]'), init); }
   if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot); else boot();
   d.addEventListener('mfnc:page', boot); // the single-page router swaps #mf-dock when pins change
 })();

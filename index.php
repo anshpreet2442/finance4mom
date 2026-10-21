@@ -93,6 +93,7 @@ $routes = [
     '/admin' => 'page_admin', '/admin/users' => 'page_admin_users', '/admin/settings' => 'page_admin_settings', '/admin/activity' => 'page_admin_activity', '/admin/system' => 'page_admin_system',
 ];
 if (!in_array(method(), ['GET', 'HEAD'], true)) { http_response_code(405); exit; }
+if ($path === '/' && !current_user()) { page_welcome(); exit; } // signed-out visitors get the landing page
 if (!isset($routes[$path])) { render_error(404, 'Page not found', 'That address does not exist.'); exit; }
 if (!in_array($path, ['/login', '/register', '/manifest.webmanifest', '/sw.js', '/offline', '/credits'], true) && ($u = current_user()) && billing_level($u) === 3 && !in_array($path, LOCKED_GET, true)) { redirect(url('/dues')); }
 $routes[$path]();

@@ -146,7 +146,7 @@ function swipe_row(string $content, array $start = [], array $end = [], string $
         return '<form method="post" action="' . e(url('/do/' . $a['action'])) . '">' . csrf_field() . '<input type="hidden" name="_back" value="' . e(current_url()) . '">' . $h
             . '<button class="' . $cls . '"' . (!empty($a['undo']) ? ' data-swipe-undo="' . e($a['undo']) . '"' : '') . ' aria-label="' . e(($a['label'] ?? '') . ($label !== '' ? ': ' . $label : '')) . '">' . $inner . '</button></form>';
     };
-    $o = '<div class="swipe-row' . (!empty($opts['class']) ? ' ' . e($opts['class']) : '') . '" data-swipe role="group" aria-roledescription="swipeable row"' . ($label !== '' ? ' aria-label="' . e($label) . '"' : '') . '>';
+    $o = '<div class="swipe-row' . (!empty($opts['class']) ? ' ' . e($opts['class']) : '') . '" data-swipe' . (!empty($opts['attrs']) ? ' ' . $opts['attrs'] : '') . ' role="group" aria-roledescription="swipeable row"' . ($label !== '' ? ' aria-label="' . e($label) . '"' : '') . '>';
     if ($start) { $o .= '<div class="swipe-row__actions swipe-row__actions--start">' . implode('', array_map($mk, $start)) . '</div>'; }
     if ($end) { $o .= '<div class="swipe-row__actions swipe-row__actions--end">' . implode('', array_map($mk, $end)) . '</div>'; }
     return $o . '<div class="swipe-row__content" tabindex="0">' . $content . '</div></div>';
