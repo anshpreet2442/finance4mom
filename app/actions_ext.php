@@ -110,12 +110,19 @@ function do_wallet_topup(array $u): ?string {
 
 // ---------------- admin: plans, budgets, wallets ----------------
 function do_admin_features_save(array $u): string {
+    // validate everything first, then write, so a rejected save leaves the stored plans untouched
+    $rows = [];
     foreach (FEATURES as $f => $m) {
-        $mode = in_enum("mode_$f", $m['modes']); set_setting("feat_{$f}_mode", $mode);
-        $price = in_money("price_$f", false, false, true, 'Price'); set_setting("feat_{$f}_price", (string) $price);
-        set_setting("feat_{$f}_days", (string) in_int("days_$f", 1, 366, 30));
-        if (in_array('payg', $m['modes'], true) && $f !== 'ai') { set_setting("feat_{$f}_unit", (string) post_micro("unit_$f")); }
+        $mode = in_enum("mode_$f", $m['modes']);
+        $price = in_money("price_$f", false, false, true, 'Price');
+        $days = in_int("days_$f", 1, 366, 30);
+        $unit = (in_array('payg', $m['modes'], true) && $f !== 'ai') ? post_micro("unit_$f") : null;
         if ($mode === 'paid' && $price <= 0) { throw new UserError($m['label'] . ' is marked paid, so it needs a price.'); }
+        $rows[$f] = [$mode, $price, $days, $unit];
+    }
+    foreach ($rows as $f => [$mode, $price, $days, $unit]) {
+        set_setting("feat_{$f}_mode", $mode); set_setting("feat_{$f}_price", (string) $price); set_setting("feat_{$f}_days", (string) $days);
+        if ($unit !== null) { set_setting("feat_{$f}_unit", (string) $unit); }
     }
     audit('admin.features', 'site'); return 'Plans saved.';
 }
