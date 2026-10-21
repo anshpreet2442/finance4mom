@@ -241,3 +241,7 @@ svg .bar:hover { filter: brightness(1.06); }
 .stat-tile__value{font-size:clamp(1.25rem,1rem + 1.1vw,1.75rem);font-weight:650;line-height:1.1;letter-spacing:-.02em;overflow-wrap:anywhere}
 .stat-tile__notes{list-style:none;margin:.25rem 0 0;padding:.75rem 0 0;border-top:1px solid color-mix(in srgb,currentColor 8%,transparent);display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;line-height:1.4;color:var(--mute,#8a8a85)}
 @media (max-width:480px){.stat-tile{padding:1rem 1.125rem}}
+/* card headers: title + action buttons wrap instead of pushing the page wider */
+main header.justify-between { flex-wrap: wrap; }
+main header.justify-between > .shrink-0 { flex-wrap: wrap; }
+main header.justify-between > .min-w-0 { flex: 1 1 14rem; }
