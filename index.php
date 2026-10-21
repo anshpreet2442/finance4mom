@@ -47,6 +47,10 @@ if (method() === 'POST' && $path === '/sync') {
     echo json_encode(['results' => sync_apply_ops($u, $body['ops'])]); exit;
 }
 
+// ---- AI advisor JSON endpoints (streamed NDJSON; CSRF in a header, like /sync) ----
+if (method() === 'POST' && $path === '/ai/chat') { handle_ai_chat(); }
+if (method() === 'POST' && $path === '/ai/act') { handle_ai_act(); }
+
 // ---- form posts: /do/{action} ----
 if (method() === 'POST') {
     if (!str_starts_with($path, '/do/')) { render_error(404, 'Page not found', 'That address does not exist.'); exit; }
@@ -84,7 +88,8 @@ $routes = [
     '/analysis' => 'page_analysis', '/accounts' => 'page_accounts', '/dues' => 'page_dues', '/dues/return' => 'page_dues_return', '/admin/billing' => 'page_admin_billing',
     '/manifest.webmanifest' => 'page_manifest', '/api/pulse' => 'page_pulse', '/sw.js' => 'page_sw', '/offline' => 'page_offline', '/credits' => 'page_credits',
     '/reports' => 'page_reports', '/settings' => 'page_settings', '/settings/backup' => 'page_backup',
-    '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
+    '/ai' => 'page_ai', '/ai/actions' => 'page_ai_actions', '/ai/settings' => 'page_ai_settings', '/ai/avatar' => 'page_ai_avatar', '/plans' => 'page_plans', '/welcome' => 'page_welcome',
+    '/admin/features' => 'page_admin_features', '/admin/ai' => 'page_admin_ai', '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
     '/admin' => 'page_admin', '/admin/users' => 'page_admin_users', '/admin/settings' => 'page_admin_settings', '/admin/activity' => 'page_admin_activity', '/admin/system' => 'page_admin_system',
 ];
 if (!in_array(method(), ['GET', 'HEAD'], true)) { http_response_code(405); exit; }

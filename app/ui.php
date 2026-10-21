@@ -197,8 +197,10 @@ function nav_items(array $u): array {
         ['yearly', '/yearly', 'Yearly Expenses', 'calendar-clock'],
         ['dues', '/dues', 'Dues & Payments', 'hand-coins'],
         ['reports', '/reports', 'Reports & Insights', 'chart-line'],
-        ['settings', '/settings', 'Settings', 'settings'],
     ];
+    if (site_setting('ai_enabled', '0') === '1' || $u['role'] === 'admin') { $items[] = ['ai', '/ai', 'AI advisor', 'sparkles']; }
+    foreach (array_keys(FEATURES) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $items[] = ['plans', '/plans', 'Plans & wallet', 'credit-card']; break; } }
+    $items[] = ['settings', '/settings', 'Settings', 'settings'];
     if ($u['role'] === 'admin') { $items[] = ['admin', '/admin', 'Admin panel', 'shield-check']; }
     return $items;
 }

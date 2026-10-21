@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 8;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
@@ -250,7 +250,7 @@ function mfnc_schema(): array {
     ) $t",
     'ai_actions' => "CREATE TABLE IF NOT EXISTS {ai_actions} (
         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, kind VARCHAR(30) NOT NULL, summary VARCHAR(300) NOT NULL, params TEXT NULL, before_json MEDIUMTEXT NULL, after_json MEDIUMTEXT NULL,
-        status ENUM('applied','undone','failed') NOT NULL DEFAULT 'applied', error VARCHAR(300) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, undone_at DATETIME NULL,
+        status ENUM('proposed','applied','undone','failed','dismissed') NOT NULL DEFAULT 'proposed', error VARCHAR(300) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, undone_at DATETIME NULL,
         INDEX idx_aia_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
     ) $t",
     'ai_usage' => "CREATE TABLE IF NOT EXISTS {ai_usage} (
@@ -304,6 +304,8 @@ function mfnc_migrate(): void {
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }
     $defaults = ['billing_enabled' => '1', 'grace_days' => '5', 'late_fee_type' => 'none', 'late_fee_flat' => '0', 'late_fee_percent' => '0', 'restrict_after_days' => '14', 'lock_after_days' => '30'];
     foreach ($defaults as $k => $v) { run('INSERT IGNORE INTO {settings} (k, v) VALUES (?, ?)', [$k, $v]); }
+    if (column_exists('entitlements', 'until')) { db()->exec(sqlt('ALTER TABLE {entitlements} CHANGE `until` valid_until DATE NOT NULL')); } // early v6 builds used a reserved-looking name
+    db()->exec(sqlt("ALTER TABLE {ai_actions} MODIFY status ENUM('proposed','applied','undone','failed','dismissed') NOT NULL DEFAULT 'proposed'")); // v7: previews and dismissals
     mfnc_fix_collations();
 }
 

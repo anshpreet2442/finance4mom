@@ -131,3 +131,32 @@ function do_admin_wallet_adjust(array $u): string {
     $sign = in_enum('op', ['credit', 'debit']); $m = post_micro('amount'); if ($m <= 0) { throw new UserError('Enter an amount.'); }
     wallet_add($uid, $sign === 'credit' ? $m : -$m, 'adjust', in_str('note', 120, false) ?: 'Admin adjustment'); audit('admin.wallet', "user#$uid", $sign . ' ' . micro_to_inr($m)); return 'Wallet updated.';
 }
+
+// ---------------- AI advisor (person) ----------------
+function ai_require(array $u): void { if ($why = ai_not_ready_reason()) { throw new UserError($why); } $fa = feature_access($u, 'ai'); if (!$fa['ok']) { throw new UserError($fa['reason']); } }
+function do_ai_profile_save(array $u): string {
+    ai_require($u); $name = ai_clean_name(in_str('agent_name', 40, true, 'Name')); if (mb_strlen($name) < 2) { throw new UserError('A name needs at least 2 letters or digits.'); }
+    run("UPDATE {ai_profiles} SET agent_name=?, avatar_style=?, stage=IF(stage='naming','ready',stage) WHERE user_id=?", [$name, in_enum('avatar_style', array_keys(AI_STYLES)), $u['id']]); ai_profile((int) $u['id']); return 'Saved.';
+}
+function do_ai_context_save(array $u): string { ai_profile((int) $u['id']); run('UPDATE {ai_profiles} SET context=? WHERE user_id=?', [in_str('context', 3000, false), $u['id']]); return 'What your advisor knows about you is updated.'; }
+function do_ai_reset(array $u): string {
+    $uid = (int) $u['id']; run('DELETE FROM {ai_messages} WHERE user_id=?', [$uid]); run("UPDATE {ai_profiles} SET stage='interview', qa=NULL, context=NULL, suggested_name=NULL, agent_name=NULL WHERE user_id=?", [$uid]); $GLOBALS['__redirect'] = url('/ai'); return 'Setup restarted.';
+}
+function do_ai_undo(array $u): string { return ai_undo((int) $u['id'], in_id('id')); }
+
+// ---------------- AI advisor (admin) ----------------
+function do_admin_ai_settings(array $u): string {
+    $model = in_enum('ai_model', array_keys(AI_MODELS)); $prompt = trim(str_replace("\r\n", "\n", (string) ($_POST['ai_system_prompt'] ?? ''))); if (mb_strlen($prompt) > 12000) { throw new UserError('The system prompt is too long (12,000 characters).'); }
+    $on = post_bool('ai_enabled'); secret_from_post('ai_key', 'ai_key');
+    if ($on && secret_get('ai_key', 'ANTHROPIC_API_KEY') === '' && !ai_mock()) { throw new UserError('Add the API key before switching the AI advisor on.'); }
+    set_setting('ai_enabled', $on ? '1' : '0'); set_setting('ai_model', $model); set_setting('ai_max_tokens', (string) in_int('ai_max_tokens', 200, 8000, 1500)); set_setting('ai_rate_min', (string) in_int('ai_rate_min', 1, 120, 6)); set_setting('ai_rate_day', (string) in_int('ai_rate_day', 1, 5000, 200));
+    set_setting('ai_default_budget_micro', (string) post_micro('ai_default_budget')); set_setting('ai_system_prompt', $prompt === trim(ai_default_prompt()) ? '' : $prompt);
+    foreach (array_keys(AI_MODELS) as $m) { foreach (['in', 'out'] as $d) { $v = trim((string) ($_POST["price_{$d}_$m"] ?? '')); if ($v !== '') { if (!is_numeric($v) || (float) $v < 0 || (float) $v > 1000000) { throw new UserError('Prices are rupees per million tokens, e.g. 250.'); } set_setting("ai_price_{$d}_$m", (string) (float) $v); } } }
+    audit('admin.ai.settings', 'site', $model); return 'AI settings saved.';
+}
+function do_admin_ai_prompt_reset(array $u): string { set_setting('ai_system_prompt', ''); return 'System prompt reset to the default.'; }
+function do_admin_ai_test(array $u): string {
+    if ($why = ai_not_ready_reason()) { throw new UserError($why); }
+    $p = ai_profile((int) $u['id']); $r = ai_call($u, $p, [['role' => 'user', 'content' => 'Reply with exactly: OK']], false); $t = ''; foreach ($r['content'] ?? [] as $b) { if (($b['type'] ?? '') === 'text') { $t .= $b['text']; } }
+    return 'The AI service answered (' . ai_cfg()['model'] . '): ' . mb_substr(trim($t), 0, 80) . ' — ' . ($r['usage']['input_tokens'] ?? '?') . ' in / ' . ($r['usage']['output_tokens'] ?? '?') . ' out tokens.';
+}

@@ -101,7 +101,7 @@ function dock_pages(bool $admin = false): array {
 function dock_pins(int $uid): array { return array_column(all('SELECT page_key FROM {dock_pins} WHERE user_id=? ORDER BY sort, page_key', [$uid]), 'page_key'); }
 /** Nav key used by layout_start() => dock page key. */
 function dock_key_for(string $active): ?string {
-    $m = ['dashboard' => 'dashboard', 'accounts' => 'accounts', 'transactions' => 'transactions', 'budget' => 'budget', 'goals' => 'goals', 'house' => 'house', 'big' => 'big', 'bills' => 'bills', 'yearly' => 'yearly', 'analysis' => 'analysis', 'dues' => 'dues', 'reports' => 'reports', 'ai' => 'ai', 'plans' => 'plans', 'settings' => 'settings', 'admin' => 'admin'];
+    $m = ['dashboard' => 'dashboard', 'accounts' => 'accounts', 'transactions' => 'transactions', 'budget' => 'budget', 'goals' => 'goals', 'house' => 'house', 'big' => 'big', 'big-purchases' => 'big', 'bills' => 'bills', 'yearly' => 'yearly', 'analysis' => 'analysis', 'dues' => 'dues', 'reports' => 'reports', 'ai' => 'ai', 'plans' => 'plans', 'settings' => 'settings', 'admin' => 'admin'];
     return $m[$active] ?? null;
 }
 /** The dock itself (rendered once in the page shell; hidden by CSS below the desktop breakpoint). */
