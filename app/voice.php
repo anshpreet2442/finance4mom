@@ -168,6 +168,8 @@ function voice_request_set(int $id, string $status, string $adminNote = '', ?int
 function voice_status_badge(string $s): string { return badge(['new' => 'New', 'in_progress' => 'In progress', 'done' => 'Done', 'refused' => 'Refused'][$s] ?? $s, ['new' => 'warn', 'in_progress' => 'dark', 'done' => 'pos', 'refused' => 'neg'][$s] ?? 'neutral'); }
 /** Extra block on a plugin card in the shop (called from plugins.php). */
 function c_plugin_extra(array $it, array $u): string {
+    $open = ['ai_layout' => ['/layout', 'Customize home'], 'share_links' => ['/share', 'Open share links'], 'pdf_export' => ['/reports', 'Open Reports'], 'voice' => ['/ai', 'Try in the AI chat']][$it['key']] ?? null;
+    if ($open && in_array($it['state'], ['owned', 'free', 'payg'], true)) { $link = '<div class="mt-3"><a class="btn btn-sm" href="' . e(url($open[0])) . '">' . e($open[1]) . '</a></div>'; if ($it['key'] !== 'voice') { return $link; } if ($it['state'] !== 'free') { return $link; } }
     if ($it['key'] !== 'voice' || !empty($it['admin_included']) || $it['state'] === 'owned') { return ''; } $fee = voice_cfg()['setup_fee']; $last = voice_request_last((int) $u['id']); $o = '<div class="mt-3 border-t border-line pt-3 text-sm">';
     if ($last && in_array($last['status'], ['new', 'in_progress'], true)) { return $o . '<p class="flex flex-wrap items-center gap-2">' . voice_status_badge($last['status']) . '<span class="text-mute">Your ElevenLabs setup request is with the team.</span></p></div>'; }
     if ($last && $last['status'] === 'refused') { $o .= '<p class="mb-2 text-xs text-mute">' . voice_status_badge('refused') . ' Your last request was refused and the fee was refunded.' . ($last['admin_note'] ? ' ' . e($last['admin_note']) : '') . '</p>'; }

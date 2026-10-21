@@ -233,16 +233,17 @@ function lw_render_page(array $u, array $ctx): string {
 function lw_text(string $html): string { return trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(preg_replace('~<(script|style)\b.*?</\1>~is', ' ', $html) ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? ''); }
 /** Structural description of the rendered result: ordered widgets with size, visible text and warnings. Built from the same HTML the page would show. */
 function lw_snapshot(array $layout, array $ctx, string $device): array {
-    $cat = lw_catalog(); $simple = !empty($layout['theme']['simple']); $items = []; $warn = []; $t = $layout['theme']; $order = 0; $visCount = 0;
+    $cat = lw_catalog(); $simple = !empty($layout['theme']['simple']); $items = []; $warn = []; $grp = []; $t = $layout['theme']; $order = 0; $visCount = 0;
     foreach ($layout['widgets'] as $w) {
         $c = $cat[$w['id']]; $row = ['id' => $w['id'], 'title' => $c[0], 'visible' => (bool) $w['visible'], 'zone' => $w['zone'], 'size' => $device === 'mobile' ? 'full' : $w['size'], 'variant' => $w['variant']];
         if ($w['visible']) { $visCount++; $html = lw_widget_html($w['id'], $w, $ctx, $simple); $txt = lw_text($html); $row['order'] = ++$order; $row['text'] = mb_substr($txt, 0, 260); $row['chars'] = mb_strlen($txt); $row['has_chart'] = str_contains($html, '<svg') && (str_contains($html, 'role="img"') || str_contains($html, '<polyline') || str_contains($html, '<rect')); $ww = [];
             if (mb_strlen($txt) < 3 || preg_match('/(Create a savings goal|No bills due soon|Set a monthly budget|No transactions yet|Add target dates|Nothing to show|No data)/i', $txt)) { $ww[] = 'empty: this widget has no data to show yet'; }
             if ($device === 'desktop' && in_array($w['size'], ['third', 'quarter'], true) && $t['font_scale'] >= 1.25) { $ww[] = 'overflow risk: a narrow widget with large text may wrap badly'; }
             if ($device === 'desktop' && $w['zone'] === 'side' && $w['size'] !== 'full') { $ww[] = 'size is ignored in the side column'; } if ($device === 'mobile' && $w['size'] !== 'full' && !in_array($w['id'], ['m_actions', 'm_recent'], true)) { $ww[] = 'size is ignored on phones (full width)'; }
-            $row['warnings'] = $ww; foreach ($ww as $x) { $warn[] = $c[0] . ': ' . $x; } }
+            $row['warnings'] = $ww; foreach ($ww as $x) { $grp[$x][] = $c[0]; } }
         $items[] = $row;
     }
+    foreach ($grp as $msg => $titles) { $warn[] = implode(', ', array_slice($titles, 0, 4)) . (count($titles) > 4 ? ' and ' . (count($titles) - 4) . ' more' : '') . ': ' . $msg; }
     foreach ($cat as $id => $c) { if (in_array($device, $c[6], true)) { $w = $layout['widgets'][lw_widget_index($layout, $id)] ?? null; if (!$w || !$w['visible']) { $warn[] = 'critical widget "' . $c[0] . '" is missing'; } } }
     if ($t['font_scale'] >= 1.3 && $t['density'] === 'compact') { $warn[] = 'overflow risk: compact density with very large text looks cramped'; } if ($device === 'mobile' && $visCount > 14) { $warn[] = 'long page: ' . $visCount . ' widgets stacked on a phone'; } if ($visCount < 3) { $warn[] = 'very few widgets visible (' . $visCount . ')'; }
     $vis = array_values(array_filter($items, fn($r) => $r['visible'])); usort($vis, fn($a, $b) => $a['order'] <=> $b['order']);
