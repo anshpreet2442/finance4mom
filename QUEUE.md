@@ -23,3 +23,8 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 ## C. Mobile UI
 - [ ] C1 Improve mobile design across all pages (spacing, tap targets >=44px, bottom nav, sheets, safe-area)
 ## D. Designer proposals (Designer appends; Builder picks up)
+
+## E. Tester bugs (Tester appends; Builder fixes)
+- [!] (A3/C1) Mobile horizontal page scroll on /accounts (scrollWidth 401>390) — 390px touch, light/dark: account `article.card.lift.flex.gap-4.p-5` is 11px wider than viewport. Expected no h-scroll. Shot: /tmp/claude-0/-home-user-finance4mom/971b8b9a-ce99-5b2a-921e-b9b2f006723f/scratchpad/shots/tester/vp_accounts.png
+- [!] (A3/C1) Mobile horizontal page scroll on all /admin* pages (399>390) — the `.jelly-radio` admin tab nav is 399px wide and its chips extend to x=610 without being its own scroll container (overflow-x:auto needed, page must not scroll). Repro: 390px, /admin or /admin/billing. Shot: .../shots/tester/vp_admin_billing.png
+- [!] (A3) /analysis has no <h1> (h1 count 0) — a11y/heading order; other pages have one.
