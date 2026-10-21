@@ -99,6 +99,7 @@ function do_dock_order(array $u): ?string {
 function do_plan_buy(array $u): ?string {
     $f = in_enum('feature', array_keys(features())); $c = feature_cfg($f);
     if ($c['mode'] !== 'paid' || $c['price'] <= 0) { throw new UserError('That is not sold as a plan.'); }
+    $it = shop_item($f); if (!$it || $it['hidden']) { throw new UserError('That plugin is not for sale.'); } // admin-hidden items cannot be bought by a direct POST either
     $id = create_self_charge((int) $u['id'], features()[$f]['label'] . ' · ' . $c['days'] . ' days', $c['price'], ['feature' => $f, 'days' => $c['days'], 'desc' => 'Access to ' . features()[$f]['label']]);
     $GLOBALS['__redirect'] = url('/dues', ['charge' => $id]); return 'Pay the charge below to unlock ' . features()[$f]['label'] . '.';
 }
