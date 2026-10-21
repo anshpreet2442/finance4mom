@@ -22,8 +22,8 @@ define('APP_URL', 'https://finance.test'); define('PAYU_BASE_URL', 'http://127.0
 $pdo = db(); $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
 foreach ($pdo->query("SHOW TABLES LIKE '%\\_mfnt'")->fetchAll(PDO::FETCH_COLUMN) as $t) { $pdo->exec("DROP TABLE `$t`"); }
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'telegram', 'telegram_bot', 'telegram_ai', 'telegram_charts', 'telegram_actions', 'shop', 'ai_files', 'ui', 'charts'] as $f) { require __DIR__ . "/../app/$f.php"; }
-mfnc_install();
+foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'telegram', 'telegram_bot', 'telegram_ai', 'telegram_charts', 'telegram_actions', 'shop', 'ai_files', 'ui', 'charts', 'mobile', 'c_core'] as $f) { require __DIR__ . "/../app/$f.php"; }
+mfnc_install(); c_install();
 require __DIR__ . '/../app/actions.php'; require __DIR__ . '/../app/actions_ext.php';
 
 // ---- tiny assertion helpers ----

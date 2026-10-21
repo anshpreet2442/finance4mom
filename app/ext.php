@@ -40,6 +40,10 @@ const FEATURES = [
     'sms' => ['label' => 'SMS alerts', 'desc' => 'Payment links and alerts by text message.', 'modes' => ['free', 'paid', 'payg']],
     'telegram' => ['label' => 'Telegram bot', 'desc' => 'Check balances, bills and goals, log expenses and get reminders in Telegram.', 'modes' => ['free', 'paid'], 'default' => 'free'],
     'telegram_ai' => ['label' => 'Telegram AI plugin', 'desc' => 'Chat with your AI advisor in Telegram: charts, buttons, receipts and actions you can undo.', 'modes' => ['free', 'paid', 'payg'], 'default' => 'paid', 'price' => 9900, 'metered' => true],
+    'ai_layout' => ['label' => 'AI Layout (beta)', 'desc' => 'Customise your home screen: widgets, sizes, order, text size and a simpler mode. Describe what you want in words and the AI arranges it, with automatic backups and one-tap reset.', 'modes' => ['free', 'paid', 'payg'], 'default' => 'free', 'metered' => true],
+    'voice' => ['label' => 'Voice (ElevenLabs)', 'desc' => 'Natural read-aloud for answers and reports, voice typing in the AI chat, spoken replies and Telegram voice notes. Falls back to your device voice automatically.', 'modes' => ['free', 'paid', 'payg'], 'default' => 'paid', 'price' => 9900, 'metered' => true],
+    'pdf_export' => ['label' => 'PDF reports', 'desc' => 'Download or email your monthly report and spending analysis as a branded PDF with charts, or share it with a temporary link.', 'modes' => ['free', 'paid', 'payg'], 'default' => 'paid', 'price' => 4900],
+    'share_links' => ['label' => 'Beautiful share links', 'desc' => 'Share a custom, read-only view of your money with friends or family through a private link and a tube-style QR code. You choose what is shown, expiry, password and view limits.', 'modes' => ['free', 'paid'], 'default' => 'paid', 'price' => 2900],
 ];
 function feature_cfg(string $f): array {
     $d = features()[$f]['default'] ?? 'free';

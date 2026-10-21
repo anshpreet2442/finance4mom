@@ -14,8 +14,8 @@ error_reporting(E_ALL);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('log_errors', '1');
 
-foreach (['db', 'schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'telegram', 'telegram_bot', 'telegram_ai', 'telegram_charts', 'telegram_actions', 'shop', 'ai_files', 'ui', 'charts', 'mobile'] as $f) {
+foreach (['db', 'schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'telegram', 'telegram_bot', 'telegram_ai', 'telegram_charts', 'telegram_actions', 'shop', 'ai_files', 'ui', 'charts', 'mobile', 'c_core'] as $f) {
     require_once __DIR__ . "/$f.php";
 }
 
-mfnc_install();   // creates database + tables on first run, upgrades when SCHEMA_VERSION changes
+mfnc_install(); c_install();   // creates database + tables on first run, upgrades when SCHEMA_VERSION changes

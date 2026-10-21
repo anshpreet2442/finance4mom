@@ -57,6 +57,9 @@ if (method() === 'POST' && $path === '/ai/chat') { handle_ai_chat(); }
 if (method() === 'POST' && $path === '/ai/act') { handle_ai_act(); }
 if (method() === 'POST' && $path === '/ai/upload') { handle_ai_upload(); }
 
+// ---- Builder-C pages and JSON endpoints (AI layout, voice, PDF, share links, payment page) ----
+c_route($path);
+
 // ---- form posts: /do/{action} ----
 if (method() === 'POST') {
     if (!str_starts_with($path, '/do/')) { render_error(404, 'Page not found', 'That address does not exist.'); exit; }
