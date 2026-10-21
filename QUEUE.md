@@ -125,3 +125,14 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 - [!] (H4, low, open) /s/<token>/og.png still renders the link title for revoked/paused/expired/password-protected links (it is served before the status checks); only the title is shown, no figures.
 - [!] (a11y, low, open) admin tab chips (Overview/Users/Billing/Site settings) are 34px tall on phones (pre-existing jelly-radio chips).
 - [!] (H2, low, open) a person who already owns the Voice plugin can still pay the setup-request fee (do_voice_request does not check feature_access).
+
+## J. Paytm import (builder-D)
+- [x] (builder-D) J1 XLSX reader app/xlsx.php (zip/XML limits, hidden sheets, shared/inline/rich strings, dates, formulas cached, CSV too)
+- [x] (builder-D) J2 adapter registry app/import_adapters.php; first adapter `paytm` (sheets classified: summary / transactions / unknown)
+- [x] (builder-D) J3 /import flow: upload -> server-side preview (1 h) with reconciliation, duplicates, account/category mapping, balance mode, per-row edits -> atomic commit -> result
+- [x] (builder-D) J4 schema v11: transactions.source/source_ref/import_id/remarks/txn_time/source_meta + unique key, tables imports + import_previews, preferences.show_import_labels
+- [x] (builder-D) J5 Remarks field + quick edit (all transactions, searchable)
+- [x] (builder-D) J6 "Imported from Paytm" pill (list, swipe rows, dashboard, edit dialog) + Settings switch
+- [x] (builder-D) J7 import history + "Remove this import" (balances back exactly)
+- [x] (builder-D) J8 tests/import_tests.php (wired from tests/run.php)
+- [x] (builder-D) J9 verified with the real workbook through Playwright (1280/390, light/dark): 180 paid / 15 received reconcile exactly, per account too
