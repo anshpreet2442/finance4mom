@@ -3,6 +3,11 @@ declare(strict_types=1);
 /** The conversation engine: Anthropic Messages API transport (or the MFNC_AI_MOCK fake), the tool loop, the setup interview, naming and avatars. */
 
 // ============================ transport ============================
+/** tool_use.input must be a JSON object: PHP decodes an empty {} to [] and would send "[]" back, which the API rejects as invalid_request_error. */
+function ai_fix_content(array $content): array {
+    foreach ($content as &$b) { if (is_array($b) && ($b['type'] ?? '') === 'tool_use' && (!isset($b['input']) || $b['input'] === [])) { $b['input'] = new stdClass(); } }
+    unset($b); return $content;
+}
 function ai_http(array $body): array {
     $c = ai_cfg();
     if (ai_mock()) { return ai_mock_call($body); }
@@ -13,10 +18,14 @@ function ai_http(array $body): array {
     if ($raw === false) { log_error(new RuntimeException('anthropic: ' . $err)); throw new UserError('Could not reach the AI service. Try again in a minute.'); }
     $r = json_decode((string) $raw, true);
     if (!is_array($r)) { log_error(new RuntimeException("anthropic: HTTP $http non-JSON")); throw new UserError('The AI service sent an unexpected reply. Try again.'); }
+    if ($http === 400 && ($r['error']['type'] ?? '') === 'invalid_request_error' && (isset($body['thinking']) || isset($body['output_config']))) {
+        // the chosen model does not accept this thinking/effort setting: log it, and answer without it instead of failing the chat
+        log_error(new RuntimeException('anthropic: retrying without thinking: ' . ($r['error']['message'] ?? ''))); unset($body['thinking'], $body['output_config']); return ai_http($body);
+    }
     if ($http >= 400 || ($r['type'] ?? '') === 'error') {
         $t = $r['error']['type'] ?? ''; log_error(new RuntimeException("anthropic: HTTP $http $t " . ($r['error']['message'] ?? '')));
         throw new UserError(match (true) { $http === 401 || $http === 403 => 'The AI service rejected the API key. The administrator needs to check it.', $http === 429 || $http === 529 => 'The AI service is busy right now. Try again in a minute.', $http === 404 => 'The selected AI model is not available to this API key. The administrator can pick another model.',
-            default => 'The AI service returned an error (' . ($t ?: "HTTP $http") . ').' });
+            default => 'The AI service returned an error (' . ($t ?: "HTTP $http") . ').' . ((($cu = current_user()) && ($cu['role'] ?? '') === 'admin' && !empty($r['error']['message'])) ? ' Details for administrators: ' . mb_substr((string) $r['error']['message'], 0, 300) : '') });
     }
     return $r;
 }
@@ -147,7 +156,7 @@ function ai_turn(array $u, string $text, callable $emit, array $opts = []): void
             if (ai_should_stop()) { $stopped = true; break; }
             $emit(['type' => 'status', 'text' => $n === 0 ? 'Thinking…' : 'Working on it…']); $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'running');
             try { $r = ai_call($u, $profile, $messages, true, $call); } catch (UserError $e) { $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'failed'); throw $e; }
-            $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'done'); $content = $r['content'] ?? []; $uses = [];
+            $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'done'); $content = ai_fix_content($r['content'] ?? []); $uses = [];
             foreach ($content as $b) { if (($b['type'] ?? '') === 'text' && trim((string) $b['text']) !== '') { $push(['type' => 'text', 'text' => mb_substr((string) $b['text'], 0, 6000)]); } elseif (($b['type'] ?? '') === 'tool_use') { $uses[] = $b; } }
             if (($r['stop_reason'] ?? '') === 'pause_turn') { $messages[] = ['role' => 'assistant', 'content' => $content]; continue; }
             if (($r['stop_reason'] ?? '') !== 'tool_use' || !$uses) { break; }

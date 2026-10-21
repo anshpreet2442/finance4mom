@@ -22,7 +22,7 @@ define('APP_URL', 'https://finance.test'); define('PAYU_BASE_URL', 'http://127.0
 $pdo = db(); $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
 foreach ($pdo->query("SHOW TABLES LIKE '%\\_mfnt'")->fetchAll(PDO::FETCH_COLUMN) as $t) { $pdo->exec("DROP TABLE `$t`"); }
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'shop', 'ai_files', 'ui', 'charts'] as $f) { require __DIR__ . "/../app/$f.php"; }
+foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ai_calc', 'ai', 'ai_chat', 'telegram', 'telegram_bot', 'telegram_ai', 'telegram_charts', 'telegram_actions', 'shop', 'ai_files', 'ui', 'charts'] as $f) { require __DIR__ . "/../app/$f.php"; }
 mfnc_install();
 require __DIR__ . '/../app/actions.php'; require __DIR__ . '/../app/actions_ext.php';
 
@@ -428,5 +428,62 @@ section('input hygiene (tester findings)');
 $_POST = ['name' => "Evil\r\nBcc: x@y.z\tname"]; eq(in_line('name', 80), 'Evil Bcc: x@y.z name', 'single-line fields lose line breaks and tabs'); $_POST = ['notes' => "line1\r\nline2\x07"]; eq(in_str('notes', 80), "line1\nline2", 'multi-line fields keep line breaks but lose control characters'); $_POST = [];
 eq(unknown_params('Hi {name} {amout} {nope}'), ['amout', 'nope'], 'typos in template parameters are found');
 check('autolink leaves trailing punctuation outside the link', str_contains(email_html('see https://x.test/a).'), 'href="https://x.test/a">https://x.test/a</a>).'));
+
+// ================= round 2 (builder-A): shop, model gating, effort mapping =================
+section('shop: catalog and features');
+$cfgSet(['feat_dock_mode' => 'free', 'feat_ai_mode' => 'free']);
+check('built-in + premium model features are registered', isset(features()['dock'], features()['mdl_claude-opus-5-5']) && !isset(features()['mdl_claude-sonnet-5-5']));
+$sh = create_user('shop@x.test', 'Shopper', 'password-12345'); $shU = ['id' => $sh, 'role' => 'user', 'name' => 'Shopper', 'email' => 'shop@x.test'];
+eq(feature_cfg('mdl_claude-opus-5-5')['mode'], 'paid', 'premium models default to paid'); check('model plugin starts locked', !ai_model_access($shU, 'claude-opus-5-5')['ok']); check('allowed model is open', ai_model_access($shU, 'claude-sonnet-5-5')['ok']);
+set_setting('shop_custom', json_encode([['key' => 'priority', 'label' => 'Priority support', 'desc' => 'x']])); check('admin-defined plugin joins the feature registry', isset(features()['priority']));
+$cfgSet(['feat_priority_mode' => 'paid', 'feat_priority_price' => '30000', 'feat_priority_days' => '30']); $it = shop_item('priority'); check('custom plugin is purchasable in the catalog', $it && $it['buyable'] && $it['price'] === 30000);
+set_setting('shop_meta', json_encode(['priority' => ['hidden' => 1]])); check('hidden items leave the shop', !array_filter(shop_catalog($shU), fn($x) => $x['key'] === 'priority') && (bool) array_filter(shop_catalog($shU, true), fn($x) => $x['key'] === 'priority')); set_setting('shop_meta', '');
+section('shop: wallet purchase, idempotency, races');
+throws(fn() => shop_buy($sh, 'priority', 'nonce-0001'), 'wallet has', 'cannot buy with an empty wallet'); eq(wallet_balance($sh), 0, 'nothing was debited');
+wallet_add($sh, 1_000_000_000, 'topup', 'test', 'seed:shop'); $r1 = shop_buy($sh, 'priority', 'nonce-0001'); eq($r1['status'], 'done', 'purchase succeeds'); eq(wallet_balance($sh), 700_000_000, 'wallet debited exactly the price');
+check('access was granted', feature_access($shU, 'priority')['ok']); $r2 = shop_buy($sh, 'priority', 'nonce-0001'); eq($r2['status'], 'already', 'the same click twice is applied once'); eq(wallet_balance($sh), 700_000_000, 'no double charge');
+eq((int) val('SELECT COUNT(*) FROM {shop_purchases} WHERE user_id=?', [$sh]), 1, 'one receipt'); $u1 = entitlement_until($sh, 'priority'); shop_buy($sh, 'priority', 'nonce-0002'); check('a second purchase extends the access', entitlement_until($sh, 'priority') > $u1);
+throws(fn() => shop_buy($sh, 'nonexistent', 'nonce-0003'), 'not for sale', 'unknown item'); throws(fn() => shop_buy($sh, 'dock', 'nonce-0004'), 'not for sale', 'a free feature is not for sale'); throws(fn() => shop_buy($sh, 'priority', 'x'), 'out of date', 'a missing nonce is refused');
+$rc = one('SELECT id FROM {shop_purchases} WHERE user_id=? LIMIT 1', [$sh]); check('receipt number is stable', str_starts_with(shop_receipt_no(one('SELECT * FROM {shop_purchases} WHERE id=?', [$rc['id']])), 'R'));
+section('shop: top-up that completes the purchase, card path, packs');
+$sh2 = create_user('shop2@x.test', 'Shopper2', 'password-12345'); $cid = shop_start_checkout($sh2, 'priority', 'wallet', 0); $ch = one('SELECT * FROM {charges} WHERE id=?', [$cid]); eq((int) $ch['amount'], 30000, 'top-up charge covers the shortfall'); eq($ch['buy_key'], 'priority', 'charge remembers what to buy');
+apply_charge_effects($ch); check('paying the top-up completes the purchase', feature_access(['id' => $sh2, 'role' => 'user'], 'priority')['ok']); eq(wallet_balance($sh2), 0, 'credit was spent on it'); apply_charge_effects($ch); eq((int) val('SELECT COUNT(*) FROM {shop_purchases} WHERE user_id=?', [$sh2]), 1, 'applying the charge twice does nothing more');
+$cid = shop_start_checkout($sh2, 'pack_small', 'card'); $ch = one('SELECT * FROM {charges} WHERE id=?', [$cid]); apply_charge_effects($ch); apply_charge_effects($ch); eq(wallet_balance($sh2), 550_000_000, 'a usage pack credits the wallet once (with bonus)');
+throws(fn() => shop_start_checkout($sh2, 'dock', 'card'), 'not for sale', 'free items have no checkout');
+section('AI models: gating and enforcement');
+$aiShop = ['id' => $sh, 'role' => 'user', 'name' => 'Shopper', 'email' => 'shop@x.test']; throws(fn() => ai_pick_model($aiShop, 'claude-opus-5-5'), 'premium', 'chat refuses a locked premium model even if the client asks'); throws(fn() => ai_pick_model($aiShop, 'claude-nope'), 'not available', 'unknown model refused');
+eq(ai_pick_model($aiShop, ''), 'claude-sonnet-5-5', 'default model when none asked'); grant_feature($sh, 'mdl_claude-opus-5-5', 30, 'test'); eq(ai_pick_model($aiShop, 'claude-opus-5-5'), 'claude-opus-5-5', 'owning the plugin unlocks the model');
+set_setting('ai_models', json_encode(['claude-haiku-5-5' => ['state' => 'hidden']])); throws(fn() => ai_pick_model($aiShop, 'claude-haiku-5-5'), 'not available', 'hidden models are refused'); check('hidden model is not listed', !array_filter(ai_model_options($aiShop), fn($m) => $m['key'] === 'claude-haiku-5-5')); check('admins may still use a hidden model', ai_model_access(['id' => 1, 'role' => 'admin'], 'claude-haiku-5-5')['ok']); set_setting('ai_models', '');
+check('locked models are listed (dimmed) after open ones', (function () { $u = ['id' => 999999, 'role' => 'user']; $o = ai_model_options($u); $l = array_column($o, 'locked'); return $l === [false, false, true, true]; })());
+$AIM = $aiShop; $ev = []; $emitM = function ($x) use (&$ev) { $ev[] = $x; };
+$aiStage = (int) val('SELECT COUNT(*) FROM {ai_profiles} WHERE user_id=?', [$sh]); ai_profile($sh); run("UPDATE {ai_profiles} SET stage='ready', agent_name='Z' WHERE user_id=?", [$sh]); revoke_feature($sh, 'mdl_claude-opus-5-5');
+ai_turn($AIM, 'hello there', $emitM, ['model' => 'claude-opus-5-5']); check('ai_turn emits an error for a locked model and does nothing', (bool) array_filter($ev, fn($x) => ($x['type'] ?? '') === 'error' && ($x['code'] ?? '') === 'model') && !array_filter($ev, fn($x) => ($x['type'] ?? '') === 'block'));
+section('AI effort mapping');
+$p = ai_effort_params('claude-sonnet-5-5', 'Max'); eq($p['output_config']['effort'], 'max', 'adaptive models get the effort level'); eq($p['thinking']['type'], 'adaptive', 'and adaptive thinking'); eq($p['max_tokens'], 16000, 'Max allows long replies');
+$p = ai_effort_params('claude-sonnet-5-5', 'Low'); eq($p['output_config']['effort'], 'low', 'Low maps to low'); eq(ai_effort_params('claude-sonnet-5-5', 'bogus')['label'], 'Medium', 'unknown labels fall back to Medium');
+set_setting('ai_models', json_encode(['claude-haiku-5-5' => ['thinking' => 'budget'], 'claude-sonnet-5-5' => ['thinking' => 'none']])); $p = ai_effort_params('claude-haiku-5-5', 'High'); eq($p['thinking'], ['type' => 'enabled', 'budget_tokens' => 2048], 'extended-thinking models get a token budget'); check('and no output_config', !isset($p['output_config']));
+$p = ai_effort_params('claude-sonnet-5-5', 'Max'); check('models without thinking ignore effort', !isset($p['thinking']) && !isset($p['output_config'])); check('but still get max_tokens', $p['max_tokens'] === 16000); eq(isset(ai_effort_params('claude-haiku-5-5', 'Low')['thinking']), false, 'a zero budget turns thinking off'); set_setting('ai_models', '');
+set_setting('ai_efforts', json_encode(['Low' => ['effort' => 'medium', 'max_tokens' => 777, 'budget' => 0]])); eq(ai_effort_params('claude-sonnet-5-5', 'Low')['max_tokens'], 777, 'admin effort map is used'); set_setting('ai_efforts', '');
+$ev = []; run("UPDATE {ai_profiles} SET stage='ready' WHERE user_id=?", [$sh]); wallet_add($sh, 0, 'adjust', 'x'); ai_turn($AIM, 'hello', $emitM, ['model' => 'claude-sonnet-5-5', 'effort' => 'Max']); check('effort and model reach the model call (mock echoes them)', (bool) array_filter($ev, fn($x) => str_contains($x['block']['text'] ?? '', 'effort max') && str_contains($x['block']['text'] ?? '', 'claude-sonnet-5-5')));
+section('AI: live steps and stop'); $ev = []; ai_turn($AIM, 'what is the emi', $emitM); $steps = array_values(array_filter($ev, fn($x) => ($x['type'] ?? '') === 'step')); check('steps are emitted running then done', count($steps) >= 4 && $steps[0]['status'] === 'running' && (bool) array_filter($steps, fn($s) => $s['status'] === 'done' && $s['label'] === 'Working out the EMI'));
+$ev = []; $GLOBALS['__ai_stop'] = function () use (&$ev) { return (bool) array_filter($ev, fn($x) => ($x['type'] ?? '') === 'step' && $x['status'] === 'done'); }; ai_turn($AIM, 'what is the emi again', $emitM); unset($GLOBALS['__ai_stop']);
+check('stop cancels further work and reports it', (bool) array_filter($ev, fn($x) => ($x['type'] ?? '') === 'cancelled') && !array_filter($ev, fn($x) => ($x['type'] ?? '') === 'block' && ($x['block']['type'] ?? '') === 'stats'));
+section('AI: attachments');
+$tmp = tempnam(sys_get_temp_dir(), 'png'); file_put_contents($tmp, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')); $up = ai_store_upload($AIM, ['tmp_name' => $tmp, 'name' => '../evil<name>.png', 'size' => filesize($tmp), 'error' => 0]); eq($up['mime'], 'image/png', 'type is sniffed from the bytes'); check('file name is sanitised', !str_contains($up['name'], '/') && !str_contains($up['name'], '<'));
+$bad = tempnam(sys_get_temp_dir(), 'bad'); file_put_contents($bad, "MZ\x90\x00 not an image"); throws(fn() => ai_store_upload($AIM, ['tmp_name' => $bad, 'name' => 'x.png', 'size' => 20, 'error' => 0]), 'not supported', 'executables renamed to .png are refused');
+$big = tempnam(sys_get_temp_dir(), 'big'); file_put_contents($big, str_repeat('a', AI_UPLOAD_MAX + 1)); throws(fn() => ai_store_upload($AIM, ['tmp_name' => $big, 'name' => 'x.txt', 'size' => 1, 'error' => 0]), 'too big', 'size limit enforced');
+$o2 = create_user('o2@x.test', 'O2', 'password-12345'); eq(count(ai_load_uploads($o2, [$up['id']])), 0, "another person's upload id is ignored"); $rows = ai_load_uploads($sh, [$up['id']]); $b = ai_upload_blocks($rows, true); eq($b[0]['type'], 'image', 'images become image blocks when the model sees them');
+$b = ai_upload_blocks($rows, false); check('without vision the file is noted, not sent', $b[0]['type'] === 'text' && str_contains($b[0]['text'], 'cannot look at images')); ai_upload_discard($rows); eq(count(ai_load_uploads($sh, [$up['id']])), 0, 'used uploads are deleted');
+$tmp2 = tempnam(sys_get_temp_dir(), 'png'); file_put_contents($tmp2, file_get_contents($tmp)); $up2 = ai_store_upload($AIM, ['tmp_name' => $tmp2, 'name' => 'a.png', 'size' => 1, 'error' => 0]); $ev = []; ai_turn($AIM, 'see this', $emitM, ['files' => [$up2['id']]]); check('the model call received the attachment', (bool) array_filter($ev, fn($x) => str_contains($x['block']['text'] ?? '', 'I can see 1 attachment')));
+@unlink($tmp); @unlink($bad); @unlink($big);
+section('cost multipliers'); $base = ai_cost_micro('claude-sonnet-5-5', 1000, 1000); set_setting('ai_models', json_encode(['claude-sonnet-5-5' => ['mult_in' => 2, 'mult_out' => 2]])); eq(ai_cost_micro('claude-sonnet-5-5', 1000, 1000), $base * 2, 'price multipliers scale the metered cost'); set_setting('ai_models', '');
+section('admin saves'); $_POST = ['default_model' => 'claude-haiku-5-5', 'state' => ['claude-haiku-5-5' => 'premium'], 'price' => ['claude-fable-5-1' => '100', 'claude-opus-5-5' => '100', 'claude-haiku-5-5' => '100'], 'days' => [], 'mult_in' => [], 'mult_out' => []];
+throws(fn() => do_admin_models_save(['id' => 1, 'role' => 'admin']), 'default model must be', 'the default model cannot be premium');
+
+section('AI: empty tool input stays a JSON object');
+$fixed = ai_fix_content([['type' => 'text', 'text' => 'hi'], ['type' => 'tool_use', 'id' => 't1', 'name' => 'get_overview', 'input' => []], ['type' => 'tool_use', 'id' => 't2', 'name' => 'get_budgets', 'input' => ['month' => '2026-10']]]);
+eq(json_encode($fixed[1]['input']), '{}', 'an empty tool input is re-sent as {} (not [])');
+eq(json_encode($fixed[2]['input']), '{"month":"2026-10"}', 'a filled tool input is untouched');
+
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);
