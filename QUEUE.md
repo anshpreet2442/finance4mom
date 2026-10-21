@@ -136,3 +136,12 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 - [x] (builder-D) J7 import history + "Remove this import" (balances back exactly)
 - [x] (builder-D) J8 tests/import_tests.php (wired from tests/run.php)
 - [x] (builder-D) J9 verified with the real workbook through Playwright (1280/390, light/dark): 180 paid / 15 received reconcile exactly, per account too
+
+## K. Round 4 (builder-E)
+- [x] FIX-1 403 on /import upload: base64 text fallback (/import/b64, /ai/upload/b64), browser-side xlsx parse + rows upload, friendly blocked message, README troubleshooting, WAF simulation in tests
+- [x] FIX-2 Telegram invalid_request_error: ai_guard.php validates every mock request like the Anthropic API, ai_fix_body repairs re-sent history, API message shown to admins only (redacted) in the Telegram log
+- [x] FIX-3 AI layout preview: srcdoc preview, SAMEORIGIN + frame-ancestors 'self', inline SVG wireframe, graceful og/qr/pdf images without GD
+- [x] FEATURE-1 AI document reading (photos for all, PDFs with the ai_docs plugin), estimate -> read -> preview -> Apply/Undo, usage tables, admin cost report and settings, Telegram parity
+- [x] FEATURE-2 JSON import with versioned AI prompt, schema/example downloads, validation with fixes, atomic import and undo
+- [x] FEATURE-3 AI chat redesign (assets/ai.css, assets/ai.js): bubbles, safe markdown, empty state, pinned composer, scroll button, copy/read aloud/retry, mobile/dark/reduced motion
+- [~] Not verified against a live Anthropic key or a real hosting firewall; mock transports and the simulator only

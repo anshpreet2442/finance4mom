@@ -125,3 +125,20 @@ Landing page: `/welcome` (and `/` when signed out). Run the tests with `MFNC_DB_
 
 ## Importing a statement (Paytm UPI .xlsx, CSV)
 Transactions -> *Import statement* (`/import`). The file is read on the server (own XLSX reader, size/zip-bomb/XML-entity limits, never stored); a preview shows every sheet found and its role, compares the rows with the statement's Summary sheet, flags rows already imported, and lets you map each statement account and tag to your accounts and categories before anything is written. *Keep my balances* adds a balance correction so today's balances do not change; *reflect* lets the rows move them. Confirm writes everything in one database transaction; *Remove this import* in the history undoes a batch. Imported rows carry an "Imported from Paytm" pill (Settings turns it off). New sources plug in via `import_register_adapter()` in `app/import_adapters.php`.
+
+### Troubleshooting uploads (hosting firewall, 403 on /import)
+Shared hosts often run a web application firewall (Imunify360 / ModSecurity) that rejects `multipart/form-data` file uploads with "403 Access to this resource on the server is denied!". The app copes in three steps, all with the same CSRF check, size limits, zip-bomb checks and rate limits as a normal upload:
+1. The file is sent as base64 text parts in ordinary form posts (`POST /import/b64`, `POST /ai/upload/b64`), in order, in chunks.
+2. If that is blocked too, an `.xlsx` is read inside the browser (zip directory + `DecompressionStream`) and only the parsed rows are posted as JSON; the server rebuilds and revalidates everything.
+3. If everything is blocked the page explains it and shows what to ask the host.
+
+What to ask the host (or do in cPanel -> Imunify360 / ModSecurity): allow `POST /do/import-upload`, `POST /import/b64`, `POST /ai/upload` and `POST /ai/upload/b64`, and whitelist the rule id shown in the firewall log for the blocked request. Also check PHP `upload_max_filesize` and `post_max_size` (at least 10M and 12M) in MultiPHP INI Editor. The test helper `tests/apache_sim.php` emulates the firewall (`SIM_WAF=1..3`) and Apache's duplicate-header behaviour.
+
+## Importing from JSON (any AI or spreadsheet)
+Import -> *JSON* tab. Copy the system prompt (admin-editable in Admin -> AI agent, with reset and a short variant), give it to any AI together with your statement, then paste the answer or upload the `.json`. The versioned schema and an example can be downloaded (`/import/json/schema`, `/import/json/example`). Amounts are integer minor units or decimal strings; the file goes through the same preview, mapping, confirm, atomic import and undo as the Paytm import, with the source label "Imported from JSON". Findings have a severity, a row reference and one-click fixes (skip, keep, flip direction, clear category); duplicates inside the file and against existing transactions are flagged; *Copy report for my AI* returns the findings in a form an AI can fix.
+
+## AI document reading (receipts, statements, PDFs)
+Photos and receipt images can be read by anyone who has the AI advisor; PDFs need the plugin "PDF documents (AI)" (`ai_docs`; price, period and mode free / paid / pay-as-you-go are editable in Admin -> Plugins). In the web chat and in Telegram the advisor first shows the page count and cost estimate; only after Read it is the model called, and nothing is charged if it fails before reading. The result is a preview with duplicate detection and multi-page chunking, applied with Apply and reversible with Undo. Admin -> AI documents holds the markup %, fixed rupees per page, minimum, max pages per document and max documents per day, and a cost report (per document, page, user, totals, average cost per page by model, last 30 days). Mock mode (`MFNC_AI_MOCK=1`) runs the whole flow on synthetic fixtures (`tests/fixtures/make_fixtures.php`).
+
+## Tests added in round 4
+`tests/round4_tests.php` (Apache and firewall simulation, request validation like the real API, layout preview headers, wireframe SVG), `tests/round4_json_tests.php`, `tests/round4_docs_tests.php`; all run from `tests/run.php`.
