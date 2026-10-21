@@ -249,17 +249,36 @@ function lw_snapshot(array $layout, array $ctx, string $device): array {
     $vis = array_values(array_filter($items, fn($r) => $r['visible'])); usort($vis, fn($a, $b) => $a['order'] <=> $b['order']);
     return ['device' => $device, 'theme' => $t, 'visible_count' => $visCount, 'order' => array_column($vis, 'id'), 'widgets' => $items, 'warnings' => array_values(array_unique($warn)), 'is_default' => lw_is_default($layout, $device), 'hash' => substr(hash('sha256', json_encode($layout)), 0, 12)];
 }
-/** Wireframe PNG of a layout (boxes with titles), used as a thumbnail and in the verify loop log. */
-function lw_wire_png(array $layout, string $device): string {
-    $W = $device === 'mobile' ? 300 : 760; $cat = lw_catalog(); $vis = array_values(array_filter($layout['widgets'], fn($w) => $w['visible'])); $rows = []; $im = null;
-    $mk = function (int $h) use (&$im, $W) { $im = imagecreatetruecolor($W, $h); imagefilledrectangle($im, 0, 0, $W, $h, imagecolorallocate($im, 244, 241, 234)); };
-    $boxes = []; $y = 10; $side = []; $pad = 8;
+/** Geometry of the wireframe: [width, height, [[x, y, w, h, widgetId], ...]]. Shared by the SVG (default) and the optional PNG. */
+function lw_wire_boxes(array $layout, string $device): array {
+    $W = $device === 'mobile' ? 300 : 760; $vis = array_values(array_filter($layout['widgets'], fn($w) => $w['visible']));
+    $boxes = []; $y = 10; $pad = 8;
     if ($device === 'mobile') { foreach ($vis as $w) { $h = in_array($w['id'], ['balance', 'accounts', 'm_recent'], true) ? 70 : 46; $boxes[] = [10, $y, $W - 20, $h, $w['id']]; $y += $h + $pad; } $H = $y + 6; }
     else { $mainW = (int) (($W - 30) * 0.68); $x0 = 10; $col = 0; $rowH = 0; $rowY = $y; $sy = $y; $mainBottom = $y;
         foreach ($vis as $w) { if ($w['zone'] === 'side') { $h = $w['id'] === 'accounts' ? 90 : 52; $boxes[] = [$W - 10 - (int) (($W - 30) * 0.32), $sy, (int) (($W - 30) * 0.32), $h, $w['id']]; $sy += $h + $pad; continue; }
             $span = LW_SIZES[$w['size']]; $bw = (int) (($mainW - $pad * 11) / 12 * $span + $pad * ($span - 1)); if ($col + $span > 12) { $rowY += $rowH + $pad; $col = 0; $rowH = 0; } $h = in_array($w['id'], ['balance'], true) ? 90 : 52; $bx = $x0 + (int) (($mainW - $pad * 11) / 12 * $col + $pad * $col); $boxes[] = [$bx, $rowY, $bw, $h, $w['id']]; $col += $span; $rowH = max($rowH, $h); $mainBottom = $rowY + $rowH; }
         $H = max($mainBottom, $sy) + 10; }
-    $mk(max(60, $H)); $ink = imagecolorallocate($im, 30, 40, 35); $card = imagecolorallocate($im, 255, 255, 255); $line = imagecolorallocate($im, 214, 218, 210); $acc = imagecolorallocate($im, 11, 107, 77); $f = pdf_font_file(false);
+    return [$W, max(60, $H), $boxes];
+}
+/** Wireframe as inline SVG (no GD, no font files, no extra request: the page embeds it as a data: image). Text is escaped. */
+function lw_wire_svg(array $layout, string $device): string {
+    [$W, $H, $boxes] = lw_wire_boxes($layout, $device); $cat = lw_catalog();
+    $o = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $W . ' ' . $H . '" width="' . $W . '" height="' . $H . '" role="img" aria-label="Wireframe of the ' . e($device) . ' home screen"><rect width="' . $W . '" height="' . $H . '" rx="10" fill="#f4f1ea"/>';
+    foreach ($boxes as [$x, $y, $w, $h, $id]) {
+        $t = e(mb_substr($cat[$id][0] ?? $id, 0, max(4, (int) ($w / 7))));
+        $o .= '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" rx="4" fill="#fff" stroke="#d6dad2"/><rect x="' . $x . '" y="' . $y . '" width="4" height="' . $h . '" rx="2" fill="#0b6b4d"/>'
+            . '<text x="' . ($x + 12) . '" y="' . ($y + 19) . '" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#1e2823">' . $t . '</text>'
+            . '<rect x="' . ($x + 12) . '" y="' . ($y + 27) . '" width="' . max(8, (int) ($w * 0.45)) . '" height="5" rx="2.5" fill="#e6e9e2"/>' . ($h > 60 ? '<rect x="' . ($x + 12) . '" y="' . ($y + 39) . '" width="' . max(8, (int) ($w * 0.3)) . '" height="5" rx="2.5" fill="#e6e9e2"/>' : '');
+    }
+    return $o . '</svg>';
+}
+/** True when GD can draw the PNG wireframe (needs FreeType for the titles; without it the SVG is used everywhere). */
+function lw_png_ok(): bool { return gd_png_ok(true) && (bool) pdf_font_file(false); }
+/** Wireframe PNG of a layout (boxes with titles), used as a thumbnail and in the verify loop log. Needs lw_png_ok(). */
+function lw_wire_png(array $layout, string $device): string {
+    [$W, $H, $boxes] = lw_wire_boxes($layout, $device); $cat = lw_catalog();
+    $im = imagecreatetruecolor($W, $H); imagefilledrectangle($im, 0, 0, $W, $H, imagecolorallocate($im, 244, 241, 234));
+    $ink = imagecolorallocate($im, 30, 40, 35); $card = imagecolorallocate($im, 255, 255, 255); $line = imagecolorallocate($im, 214, 218, 210); $acc = imagecolorallocate($im, 11, 107, 77); $f = pdf_font_file(false);
     foreach ($boxes as [$x, $yy, $w, $h, $id]) { imagefilledrectangle($im, $x, $yy, $x + $w, $yy + $h, $card); imagerectangle($im, $x, $yy, $x + $w, $yy + $h, $line); imagefilledrectangle($im, $x, $yy, $x + 3, $yy + $h, $acc); $t = mb_substr($cat[$id][0], 0, (int) ($w / 7));
         if ($f) { imagettftext($im, 8, 0, $x + 9, $yy + 17, $ink, $f, $t); } else { imagestring($im, 2, $x + 9, $yy + 5, preg_replace('/[^\x20-\x7e]/', '', $t), $ink); } }
     ob_start(); imagepng($im); return (string) ob_get_clean();

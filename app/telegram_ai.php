@@ -171,6 +171,10 @@ function tg_render_block(array $b, int $chat, int $uid): array {
             return $m('<b>' . tg_h($b['title']) . "</b>\n" . ($rows ? tg_pre_table($cols, array_values($rows), 36) . "\n" : '') . tg_h($b['result']['label']) . ': <b>' . tg_h($b['result']['value']) . '</b>', ['rich' => count($b['steps']) > 8]);
         }
         case 'chart': {
+            if (!gd_png_ok()) {   // no GD on this host: the same numbers as a monospace table instead of a picture
+                $vals = $b['series'][0]['values'] ?? []; $rows = []; foreach ($b['labels'] as $i => $lb) { $rows[] = [(string) $lb, tg_val_fmt($vals[$i] ?? 0, !empty($b['money']) ? 'money' : 'number')]; }
+                return $m('<b>' . tg_h($b['title'] ?: 'Chart') . "</b>\n" . tg_pre_table([['label' => 'Item', 'type' => 'text'], ['label' => 'Value', 'type' => 'number']], $rows, 36), ['rich' => false]);
+            }
             $kind = $b['kind'] === 'donut' ? 'pie' : $b['kind']; $png = tg_chart_png(['kind' => $kind, 'title' => $b['title'], 'labels' => $b['labels'], 'series' => $b['series'], 'money' => $b['money']]);
             return [['html' => '', 'markup' => null, 'photo' => $png, 'rich' => false, 'caption' => $b['title']]];
         }
@@ -300,6 +304,7 @@ function tg_ai_callback(string $id, int $chat, ?int $mid, array $u, array $link,
         case 'ch': {
             $name = TG_CHARTS[(string) ($args[0] ?? '')] ?? throw new UserError('Unknown chart.'); tg_answer($id, 'Drawing it…'); tg_typing($chat, 'upload_photo');
             $spec = tg_chart_data($uid, $name); if (!$spec) { tg_send($chat, "There is nothing to chart yet. Add a few transactions or goals first.", null, [], $uid); return; }
+            if (!gd_png_ok()) { $vals = $spec['series'][0]['values'] ?? []; $rows = []; foreach ($spec['labels'] as $i => $lb) { $rows[] = [(string) $lb, tg_val_fmt($vals[$i] ?? 0, !empty($spec['money']) ? 'money' : 'number')]; } tg_send($chat, '<b>' . tg_h($spec['title']) . "</b>\n" . tg_pre_table([['label' => 'Item', 'type' => 'text'], ['label' => 'Value', 'type' => 'number']], $rows, 36), null, [], $uid); return; }
             tg_photo($chat, tg_chart_png($spec), '<b>' . tg_h($spec['title']) . '</b>', null, $uid); return;
         }
     }

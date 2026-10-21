@@ -40,7 +40,7 @@ function lw_state(array $u, array $row, array $extra = []): array {
     foreach ($layout['widgets'] as $w) { $c = $cat[$w['id']]; $rows[] = ['id' => $w['id'], 'title' => $c[0], 'desc' => $c[1], 'visible' => $w['visible'], 'size' => $w['size'], 'variant' => $w['variant'], 'zone' => $w['zone'], 'sizes' => $c[2], 'variants' => $c[3], 'critical' => in_array($dev, $c[6], true), 'group' => $c[7]]; }
     $rev = substr(hash('sha256', (string) $row['cur'] . $row['updated_at']), 0, 8);
     return $extra + ['ok' => true, 'draft' => (int) $row['id'], 'device' => $dev, 'rev' => $rev, 'layout' => $layout, 'widgets' => $rows, 'dirty' => json_encode($layout) !== json_encode($live), 'is_default' => lw_is_default($layout, $dev), 'can_undo' => (json_decode((string) $row['hist_undo'], true) ?: []) !== [], 'can_redo' => (json_decode((string) $row['hist_redo'], true) ?: []) !== [],
-        'snapshot' => ['order' => $snap['order'], 'warnings' => $snap['warnings'], 'visible_count' => $snap['visible_count'], 'hash' => $snap['hash']], 'preview' => url('/layout/preview', ['draft' => $row['id'], 'rev' => $rev]), 'wire' => url('/layout/wire.png', ['draft' => $row['id'], 'rev' => $rev]),
+        'snapshot' => ['order' => $snap['order'], 'warnings' => $snap['warnings'], 'visible_count' => $snap['visible_count'], 'hash' => $snap['hash']], 'preview' => url('/layout/preview', ['draft' => $row['id'], 'rev' => $rev]), 'wire' => url('/layout/wire.png', ['draft' => $row['id'], 'rev' => $rev]), 'wire_svg' => lw_wire_svg($layout, $dev),
         'backups' => lw_backups($uid, $dev), 'limit' => lw_limit(), 'optin' => site_setting('lw_optin_' . $uid, '') === '1', 'diff' => lw_diff($live, $layout, $dev)];
 }
 
@@ -189,10 +189,13 @@ function page_layout(): void {
 }
 function page_layout_preview(): void {
     $u = require_login(); if (!lw_enabled($u)) { render_error(403, 'Not available', 'AI Layout is not on your plan.'); return; } $row = one('SELECT * FROM {c_layout_drafts} WHERE id=? AND user_id=?', [(int) ($_GET['draft'] ?? 0), $u['id']]); if (!$row) { render_error(404, 'Not found', 'That draft is gone.'); return; }
-    $dev = (string) $row['device']; $layout = lw_draft_layout($row); $ctx = lw_ctx($u); [$cls, $css] = lw_theme_attrs($layout['theme']); c_hdr('X-Frame-Options: SAMEORIGIN'); c_hdr('Content-Type: text/html; charset=utf-8'); c_hdr('Cache-Control: no-store');
+    $dev = (string) $row['device']; $layout = lw_draft_layout($row); $ctx = lw_ctx($u); [$cls, $css] = lw_theme_attrs($layout['theme']); c_hdr('X-Frame-Options: SAMEORIGIN'); c_hdr("Content-Security-Policy: frame-ancestors 'self'"); c_hdr('Content-Type: text/html; charset=utf-8'); c_hdr('Cache-Control: no-store');
     echo '<!doctype html><html lang="en"' . (!empty($_GET['dark']) ? ' class="dark"' : '') . '><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Preview</title><meta name="color-scheme" content="light dark">'
         . '<link rel="stylesheet" href="' . e(asset('app.css')) . '"><link rel="stylesheet" href="' . e(asset('ext.css')) . '"><link rel="stylesheet" href="' . e(asset('polish.css')) . '"><link rel="stylesheet" href="' . e(asset('c.css')) . '"><style>' . $css . 'body{overflow-x:hidden}.splash{display:none!important}</style></head><body class="bg-page text-ink antialiased" data-preview="1" data-layout-hash="' . e(lw_snapshot($layout, $ctx, $dev)['hash']) . '"><main class="' . ($dev === 'mobile' ? 'px-4' : 'px-8') . ' py-5"><div class="' . e($cls) . '" data-lw-device="' . e($dev) . '">' . lw_render_layout($layout, $ctx, $dev) . '</div></main></body></html>';
 }
 function layout_wire_png(): void {
-    $u = require_login(); $row = one('SELECT * FROM {c_layout_drafts} WHERE id=? AND user_id=?', [(int) ($_GET['draft'] ?? 0), $u['id']]); if (!$row) { c_status(404); return; } c_hdr('Content-Type: image/png'); c_hdr('Cache-Control: private, no-store'); echo lw_wire_png(lw_draft_layout($row), (string) $row['device']);
+    $u = require_login(); $row = one('SELECT * FROM {c_layout_drafts} WHERE id=? AND user_id=?', [(int) ($_GET['draft'] ?? 0), $u['id']]); if (!$row) { c_status(404); return; } c_hdr('Cache-Control: private, no-store'); c_hdr('X-Content-Type-Options: nosniff');
+    // PNG only where GD + FreeType can really draw it; everywhere else the same URL answers with the SVG (an <img> shows either), so there is never a broken image
+    try { if (lw_png_ok() && !isset($_GET['svg']) && !str_ends_with(request_path(), '.svg')) { $png = lw_wire_png(lw_draft_layout($row), (string) $row['device']); if ($png !== '') { c_hdr('Content-Type: image/png'); echo $png; return; } } } catch (Throwable $e) { log_error($e); }
+    c_hdr('Content-Type: image/svg+xml; charset=utf-8'); c_hdr("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'"); echo lw_wire_svg(lw_draft_layout($row), (string) $row['device']);
 }

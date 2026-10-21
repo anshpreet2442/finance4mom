@@ -24,14 +24,26 @@
     var pvCard = card('Preview', 'What your home screen will look like. This is the real page, drawn from your draft.'); right.appendChild(noticeEl); right.appendChild(pvCard);
 
     // ---------- preview
-    var pvBar = el('div', 'lw-pv__bar'), frameWrap = el('div', 'lw-pv__frame'), frame = el('iframe', 'lw-pv__if'), wire = el('img', 'lw-pv__wire'); frame.setAttribute('title', 'Preview of your home screen'); frame.setAttribute('sandbox', 'allow-same-origin'); wire.alt = 'Wireframe of the layout'; wire.hidden = true; frameWrap.appendChild(frame); frameWrap.appendChild(wire);
+    var pvBar = el('div', 'lw-pv__bar'), frameWrap = el('div', 'lw-pv__frame'), frame = el('iframe', 'lw-pv__if'), wire = el('img', 'lw-pv__wire'), wireTxt = el('ol', 'lw-pv__wiretxt'); wireTxt.hidden = true; frame.setAttribute('title', 'Preview of your home screen'); frame.setAttribute('sandbox', 'allow-same-origin'); wire.alt = 'Wireframe of the layout'; wire.hidden = true; frameWrap.appendChild(frame); frameWrap.appendChild(wire); frameWrap.appendChild(wireTxt);
+    // the wireframe is an inline SVG sent with the state (no image request, no GD); if an image still cannot be shown, the plain ordered list below is used instead of a broken-image icon
+    function wireText() { wireTxt.textContent = ''; ((S && S.widgets) || []).filter(function (w) { return w.visible; }).forEach(function (w) { wireTxt.appendChild(el('li', '', w.title + ' · ' + w.size)); }); }
+    wire.onerror = function () { wire.hidden = true; wireText(); wireTxt.hidden = false; };
+    // the live preview is fetched and shown with srcdoc: it works whatever X-Frame-Options / frame-ancestors the host adds to /layout/preview. Falls back to a normal src if fetch fails.
+    var pvSeq = 0, pvNote = el('p', 'lw-pv__note', ''); pvNote.hidden = true;
+    function loadLive(url) {
+      var my = ++pvSeq; pvNote.hidden = true;
+      function direct() { if (my !== pvSeq) return; frame.removeAttribute('srcdoc'); frame.src = url; }
+      if (!window.fetch || !('srcdoc' in frame)) { direct(); return; }
+      fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'mfnc-preview' } }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+        .then(function (html) { if (my !== pvSeq) return; if (html.indexOf('data-preview') < 0) throw new Error('not the preview'); frame.removeAttribute('src'); frame.srcdoc = html; }).catch(direct);
+    }
     var viewBtns = el('div', 'lw-seg'); var bLive = btn('Live preview', 'btn-sm', function () { view = 'live'; paintPv(); }), bWire = btn('Wireframe', 'btn-sm', function () { view = 'wire'; paintPv(); }); viewBtns.appendChild(bLive); viewBtns.appendChild(bWire); pvBar.appendChild(viewBtns);
     var chip = el('span', 'lw-chip', ''); pvBar.appendChild(chip); var warnBox = el('ul', 'lw-warn'); pvCard._body.appendChild(pvBar); pvCard._body.appendChild(frameWrap); pvCard._body.appendChild(warnBox);
     function fit() { var W = device === 'mobile' ? 390 : 1280, cw = frameWrap.clientWidth || 600, s = Math.min(1, cw / W), H = 620; frame.style.width = W + 'px'; frame.style.height = (H / s) + 'px'; frame.style.transform = 'scale(' + s + ')'; frameWrap.style.height = H + 'px'; frame.style.transformOrigin = 'top left'; if (device === 'mobile') { frame.style.marginLeft = Math.max(0, (cw - W * s) / 2) + 'px'; } else { frame.style.marginLeft = '0'; } }
     var lastRev = '';
     function paintPv() {
       bLive.classList.toggle('btn-dark', view === 'live'); bWire.classList.toggle('btn-dark', view === 'wire'); frame.hidden = view !== 'live'; wire.hidden = view !== 'wire'; if (!S) return; fit();
-      if (lastRev !== S.rev + view) { lastRev = S.rev + view; if (view === 'live') frame.src = S.preview + (d.documentElement.classList.contains('dark') ? '&dark=1' : ''); else wire.src = S.wire; }
+      if (lastRev !== S.rev + view) { lastRev = S.rev + view; if (view === 'live') loadLive(S.preview + (d.documentElement.classList.contains('dark') ? '&dark=1' : '')); else { wireTxt.hidden = true; wire.hidden = false; wire.src = S.wire_svg ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(S.wire_svg) : S.wire; } }
       chip.textContent = 'Checked · ' + S.snapshot.hash + ' · ' + S.snapshot.visible_count + ' widgets' + (S.dirty ? ' · unsaved draft' : ' · matches your live home screen'); chip.className = 'lw-chip' + (S.dirty ? ' is-draft' : '');
       warnBox.textContent = ''; S.snapshot.warnings.forEach(function (t) { warnBox.appendChild(el('li', '', t)); }); warnBox.hidden = !S.snapshot.warnings.length;
     }

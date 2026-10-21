@@ -16,6 +16,7 @@ set_exception_handler(function (Throwable $e) {
 });
 
 header('X-Frame-Options: DENY');
+header('X-Mfnc-App: 1');   // lets our own scripts tell an answer from this app apart from a hosting firewall page
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: camera=(), microphone=(), geolocation=()');

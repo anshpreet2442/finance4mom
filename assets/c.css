@@ -66,3 +66,5 @@ html:not(.dark) .text-lime-dk,html:not(.dark) .text-orange-dk{color:color-mix(in
 /* big text / easy mode: money never breaks across lines, and the two-column tiles become one column on phones */
 .lw .stat-tile__value,.lw .stat-grid .num{white-space:nowrap}
 @media (max-width:639.98px){.lw-big .stat-grid,.lw-simple .stat-grid,.lw-xl .stat-grid{grid-template-columns:minmax(0,1fr)}}
+/* round 4: wireframe fallback list and a wireframe that always fills the card */
+.lw-pv__wire{width:100%;height:auto}.lw-pv__wiretxt{margin:0;padding:14px 14px 14px 34px;font-size:14px;line-height:1.7;color:var(--ink,#1e2823)}

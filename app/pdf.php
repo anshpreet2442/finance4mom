@@ -70,6 +70,7 @@ function pdf_save_png($im, int $w, int $h): string {
 }
 /** Grouped bar chart. $series = [[name, colour, values[]], ...]. */
 function pdf_chart_bars(array $labels, array $series, int $w = 1200, int $h = 460): string {
+    if (!gd_png_ok()) { return ''; }   // no GD on this host: the report simply has no chart images
     $im = imagecreatetruecolor($w, $h); imageantialias($im, true); $bg = pdf_hex($im, '#ffffff'); imagefilledrectangle($im, 0, 0, $w, $h, $bg); $grid = pdf_hex($im, '#e6e8e4'); $ink = pdf_hex($im, '#44504a');
     $max = 1; foreach ($series as $s) { $max = max($max, ...array_map('abs', $s[2] ?: [0])); } $step = $max <= 0 ? 1 : 10 ** floor(log10($max)); foreach ([1, 2, 2.5, 5, 10] as $k) { if ($max / ($step * $k) <= 5) { $step *= $k; break; } } $top = (int) (ceil($max / $step) * $step);
     $L = 120; $R = 20; $T = 40; $B = 70; $cw = $w - $L - $R; $ch = $h - $T - $B;
@@ -82,6 +83,7 @@ function pdf_chart_bars(array $labels, array $series, int $w = 1200, int $h = 46
 }
 /** Donut chart with the slices [[label, value]] in PDF_COLORS order. */
 function pdf_chart_pie(array $slices, int $size = 700): string {
+    if (!gd_png_ok()) { return ''; }   // no GD on this host: the report simply has no chart images
     $im = imagecreatetruecolor($size, $size); imageantialias($im, true); imagefilledrectangle($im, 0, 0, $size, $size, pdf_hex($im, '#ffffff')); $tot = max(1, array_sum(array_column($slices, 1))); $cx = $cy = (int) ($size / 2); $r = (int) ($size * 0.46); $a = 270.0;
     foreach ($slices as $i => $sl) { $deg = $sl[1] / $tot * 360; $st = (int) round($a) % 360; $en = (int) round($a + $deg) % 360; if ($en === $st) { $en = ($st + 360 - 1) % 360; } if ($deg > 0.5) { imagefilledarc($im, $cx, $cy, $r * 2, $r * 2, $st, $en, pdf_hex($im, PDF_COLORS[$i % count(PDF_COLORS)]), IMG_ARC_PIE); } $a += $deg; }
     imagefilledellipse($im, $cx, $cy, (int) ($r * 1.1), (int) ($r * 1.1), pdf_hex($im, '#ffffff')); if (!$slices) { imagefilledellipse($im, $cx, $cy, $r * 2, $r * 2, pdf_hex($im, '#e6e8e4')); imagefilledellipse($im, $cx, $cy, (int) ($r * 1.1), (int) ($r * 1.1), pdf_hex($im, '#ffffff')); }
@@ -89,6 +91,7 @@ function pdf_chart_pie(array $slices, int $size = 700): string {
 }
 /** Line / area chart of one series with labels along the bottom. */
 function pdf_chart_line(array $labels, array $values, string $color = '#0b6b4d', int $w = 1200, int $h = 460): string {
+    if (!gd_png_ok()) { return ''; }   // no GD on this host: the report simply has no chart images
     $im = imagecreatetruecolor($w, $h); imageantialias($im, true); imagefilledrectangle($im, 0, 0, $w, $h, pdf_hex($im, '#ffffff')); $grid = pdf_hex($im, '#e6e8e4'); $ink = pdf_hex($im, '#44504a'); $L = 120; $R = 30; $T = 30; $B = 60; $cw = $w - $L - $R; $ch = $h - $T - $B;
     $max = max(1, ...($values ?: [0])); $min = min(0, ...($values ?: [0])); $range = max(1, $max - $min); $n = count($values);
     for ($i = 0; $i <= 4; $i++) { $y = (int) ($T + $ch - $i / 4 * $ch); imageline($im, $L, $y, $w - $R, $y, $grid); pdf_txt_gd($im, 17, $L - 12, $y + 6, $ink, pdf_short_money((int) ($min + $range * $i / 4)), false, 'right'); }
@@ -101,6 +104,8 @@ function pdf_chart_line(array $labels, array $values, string $color = '#0b6b4d',
 // ============================ FPDF document ============================
 require_once __DIR__ . '/vendor/fpdf/fpdf.php';
 class MfPdf extends FPDF {
+    /** A chart that could not be drawn ('' path, e.g. no GD) is skipped instead of raising an error. */
+    function Image($file, $x = null, $y = null, $w = 0, $h = 0, $type = '', $link = ''): void { if ($file === '' || !is_file($file)) { return; } parent::Image($file, $x, $y, $w, $h, $type, $link); }
     public bool $uni = false; public string $docTitle = ''; public string $docSub = '';
     function __construct() { parent::__construct('P', 'mm', 'A4'); $this->uni = pdf_fonts_ok(); if ($this->uni) { $this->AddFont('dejavu', '', 'dejavu.json'); $this->AddFont('dejavu', 'B', 'dejavub.json'); } $this->SetMargins(14, 14, 14); $this->SetAutoPageBreak(true, 18); $this->AliasNbPages('{nb}'); $this->SetCreator(APP_NAME); }
     /** UTF-8 to the embedded code page (byte 0x80 = rupee sign) or to Latin-1 with "Rs." when the fonts are missing. */
@@ -188,7 +193,7 @@ function pdf_build_analysis(array $d): string {
 
 // ============================ ReportLab engine (optional) ============================
 function pdf_build_reportlab(array $d, string $kind): ?string {
-    if (!pdf_reportlab_available()) { return null; } $dir = sys_get_temp_dir() . '/mfpdf-' . bin2hex(random_bytes(6)); if (!@mkdir($dir, 0700)) { return null; } $tmp = [];
+    if (!pdf_reportlab_available() || !gd_png_ok()) { return null; } $dir = sys_get_temp_dir() . '/mfpdf-' . bin2hex(random_bytes(6)); if (!@mkdir($dir, 0700)) { return null; } $tmp = [];
     try {
         $d['charts'] = ['bars' => pdf_chart_bars(array_column($d['series'], 'label'), [['Income', '#0b6b4d', array_column($d['series'], 'income')], ['Expenses', '#d4560f', array_column($d['series'], 'expenses')]])];
         if ($d['categories']) { $d['charts']['pie'] = pdf_chart_pie(array_map(fn($c) => [$c['name'], $c['amount']], array_slice($d['categories'], 0, 8))); }

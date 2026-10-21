@@ -152,6 +152,13 @@ function qr_svg(array $m, array $o = []): string {
         $svg .= '<path fill="' . $f . '" fill-rule="evenodd" d="' . qr_rrect_path($X, $Y, 7, 7, 2.2) . qr_rrect_path($X + 1, $Y + 1, 5, 5, 1.3) . '"/><path fill="' . $f . '" d="' . qr_rrect_path($X + 2, $Y + 2, 3, 3, 1.0) . '"/>'; }
     return $svg . '</svg>';
 }
+/** Can this host draw PNGs (GD, and FreeType when text is needed)? Every PNG route checks it and falls back to SVG. `$GLOBALS['__no_gd']` lets tests simulate a host without GD. */
+function gd_png_ok(bool $text = false): bool {
+    if (!empty($GLOBALS['__no_gd'])) { return false; }
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagepng')) { return false; }
+    if ($text) { if (!function_exists('imagettftext')) { return false; } $i = function_exists('gd_info') ? gd_info() : []; if (empty($i['FreeType Support'])) { return false; } }
+    return true;
+}
 function qr_png(array $m, array $o = []): string {
     $o = qr_opts($o); $n = count($m); $q = $o['quiet']; $dim = $n + 2 * $q; $style = $o['style'];
     $cell = max(4, (int) ceil($o['size'] * 2 / $dim)); $px = $dim * $cell; $im = imagecreatetruecolor($px, $px);

@@ -178,7 +178,13 @@ function share_public(string $token, string $sub = ''): void {
     share_page_shell($r['title'], $body, $og);
 }
 /** 1200x630 preview card. Shows only the title and the app name, never any figures. */
+function share_og_svg(array $r): string {
+    $title = e(mb_substr((string) $r['title'], 0, 48)); $app = e(APP_NAME);
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630"><rect width="1200" height="630" fill="#0b3d2e"/><text x="70" y="120" font-family="system-ui,Segoe UI,Roboto,sans-serif" font-size="30" fill="#58d3a0">' . $app . '</text>'
+        . '<text x="70" y="270" font-family="system-ui,Segoe UI,Roboto,sans-serif" font-size="58" font-weight="700" fill="#f4f1ea">' . $title . '</text><text x="70" y="560" font-family="system-ui,Segoe UI,Roboto,sans-serif" font-size="26" fill="#58d3a0">Read-only view shared with you</text></svg>';
+}
 function share_og_png(array $r): void {
+    if (!gd_png_ok(true)) { c_hdr('Content-Type: image/svg+xml; charset=utf-8'); c_hdr('Cache-Control: public, max-age=300'); echo share_og_svg($r); return; }   // no GD / FreeType on this host: an SVG card instead of a fatal error
     $im = imagecreatetruecolor(1200, 630); $bg = imagecolorallocate($im, 11, 61, 46); $fg = imagecolorallocate($im, 244, 241, 234); $ac = imagecolorallocate($im, 88, 211, 160); imagefilledrectangle($im, 0, 0, 1200, 630, $bg);
     $font = __DIR__ . '/../assets/fonts/DejaVuSans-Bold.ttf'; $reg = __DIR__ . '/../assets/fonts/DejaVuSans.ttf'; $title = mb_substr((string) $r['title'], 0, 60);
     $m = qr_matrix(share_url(share_token_of($r)) ?: 'x', 'M'); $qr = imagecreatefromstring(qr_png($m, ['fg' => '#0b3d2e', 'bg' => '#f4f1ea', 'size' => 300, 'style' => $r['style'] ?? 'tube'])); if ($qr) { imagecopy($im, $qr, 840, 165, 0, 0, 300, 300); }
@@ -249,7 +255,7 @@ function page_share_new(): void {
 function share_qr_http(): void {
     $u = require_login(); $r = one('SELECT * FROM {c_share_links} WHERE id=? AND user_id=?', [(int) ($_GET['id'] ?? 0), $u['id']]); if (!$r) { render_error(404, 'Not found', 'That link does not exist.'); return; }
     $tok = share_token_of($r); if ($tok === '') { render_error(404, 'Not found', 'That link has no address.'); return; }
-    $fmt = ($_GET['fmt'] ?? 'svg') === 'png' ? 'png' : 'svg'; $o = ['fg' => $r['color'], 'style' => $r['style'], 'size' => $fmt === 'png' ? 1024 : 640]; $m = qr_matrix(share_url($tok), 'M');
+    $fmt = ($_GET['fmt'] ?? 'svg') === 'png' && gd_png_ok() ? 'png' : 'svg'; $o = ['fg' => $r['color'], 'style' => $r['style'], 'size' => $fmt === 'png' ? 1024 : 640]; $m = qr_matrix(share_url($tok), 'M');
     c_hdr('Cache-Control: private, no-store'); if (!empty($_GET['dl'])) { c_hdr('Content-Disposition: attachment; filename="share-link-qr.' . $fmt . '"'); }
     if ($fmt === 'png') { c_hdr('Content-Type: image/png'); echo qr_png($m, $o); } else { c_hdr('Content-Type: image/svg+xml'); echo qr_svg($m, $o); }
 }
