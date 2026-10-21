@@ -157,6 +157,7 @@ function do_bill_pay(array $u): string {
     return 'Payment recorded.';
 }
 function do_occurrence_skip(array $u): string { skip_occurrence((int) $u['id'], in_id('id'), true); return 'Skipped.'; }
+function do_notification_dismiss(array $u): string { run('UPDATE {notifications} SET is_read=1 WHERE user_id=? AND id=?', [$u['id'], in_id('id')]); return 'Reminder dismissed.'; }
 function do_notifications_read(array $u): string { run('UPDATE {notifications} SET is_read=1 WHERE user_id=?', [$u['id']]); return 'Reminders dismissed.'; }
 
 // ---------------- planning ----------------

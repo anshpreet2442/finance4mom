@@ -61,7 +61,8 @@ function page_transactions(): void {
 <section class="card min-w-0">
   <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-6 py-4 text-sm"><span class="text-mute"><?= count($rows) ?> transaction<?= count($rows) === 1 ? '' : 's' ?></span><span class="num"><span class="text-lime-dk">+<?= e(fmt($inc)) ?></span> <span class="mx-1 text-mute">/</span> −<?= e(fmt($exp)) ?></span></div>
   <?php if (!$rows): ?><div class="p-6"><?= empty_state('No transactions match', $s['txs'] ? 'Try clearing some filters.' : 'Add your first transaction to get started.') ?></div><?php else: ?>
-  <div class="relative overflow-x-auto"><table class="w-full min-w-[640px] border-collapse">
+  <?= tx_swipe_list($s, $pageRows, $acc) ?>
+  <div class="relative overflow-x-auto max-lg:hidden"><table class="w-full min-w-[640px] border-collapse">
     <thead><tr class="border-b border-line"><th class="th"><a href="<?= e($sortLink('date')) ?>" class="inline-flex items-center gap-1">Date <?= $f['sort'] === 'date' ? icon($f['dir'] === 'desc' ? 'arrow-down' : 'arrow-up', 'size-3') : '' ?></a></th><th class="th">Description</th><th class="th">Category</th><th class="th">Account</th>
       <th class="th text-right"><a href="<?= e($sortLink('amount')) ?>" class="inline-flex items-center gap-1">Amount <?= $f['sort'] === 'amount' ? icon($f['dir'] === 'desc' ? 'arrow-down' : 'arrow-up', 'size-3') : '' ?></a></th><th class="th"><span class="sr-only">Actions</span></th></tr></thead>
     <tbody class="divide-y divide-line">
@@ -184,4 +185,19 @@ function page_expenses(): void {
     echo '<div class="mt-6">'; card_open('Recurring expenses', 'For repeating costs that are not bills, such as household help. Each due date creates a planned expense you confirm when paid.', dialog_form('tpl-new', 'Add recurring', 'New recurring expense', 'template-save', template_fields('expense', $s), 'Save', 'btn btn-sm'));
     echo template_list($s, 'expense') ?: '<p class="text-sm text-mute">Nothing set up yet. Bills with due dates live on the Bills page.</p>'; card_close(); echo '</div>';
     layout_end();
+}
+
+/** Phone layout of the transaction table: swipe right to edit / mark done, swipe left to delete (with undo). */
+function tx_swipe_list(array $s, array $rows, array $acc): string {
+    $o = '<p class="swipe-hint lg:hidden">Swipe a row for actions</p><ul class="m-rows swipe-list lg:hidden">';
+    foreach ($rows as $t) {
+        $sub = $t['type'] === 'transfer' ? ($acc[$t['account_id']] ?? '') . ' → ' . ($acc[$t['to_account_id']] ?? '') : cat_path($s, $t['category_id'] ? (int) $t['category_id'] : null);
+        $c = '<div class="m-row"><span class="m-row__ic">' . icon(['income' => 'arrow-down-left', 'refund' => 'undo-2', 'transfer' => 'arrow-left-right', 'adjustment' => 'sliders-horizontal'][$t['type']] ?? 'arrow-up-right', 'size-4') . '</span>'
+            . '<div class="m-row__main"><p class="m-row__t">' . e(tx_label($s, $t)) . '</p><p class="m-row__s">' . e(date_label($t['date'])) . ' · ' . e($sub) . ($t['status'] === 'planned' ? ' · Planned' : '') . ($t['occurrence_id'] ? ' · Bill' : '') . '</p></div>'
+            . '<span class="m-row__amt ' . amount_class($t) . '">' . e(signed_amount($t)) . '</span></div>';
+        $start = []; if ($t['status'] === 'planned') { $start[] = ['action' => 'transaction-complete', 'fields' => ['id' => $t['id']], 'label' => $t['type'] === 'income' ? 'Received' : 'Paid', 'icon' => 'circle-check', 'tone' => 'ok']; }
+        if (!$t['occurrence_id']) { $start[] = ['type' => 'attr', 'attrs' => 'data-tx-edit="' . json_attr(tx_edit_json($s, $t)) . '"', 'label' => 'Edit', 'icon' => 'pencil', 'tone' => 'primary']; }
+        $o .= '<li>' . swipe_row($c, $start, [['action' => 'transaction-delete', 'fields' => ['id' => $t['id']], 'label' => 'Delete', 'icon' => 'trash-2', 'tone' => 'danger', 'undo' => 'Transaction deleted']], tx_label($s, $t) . ', ' . signed_amount($t)) . '</li>';
+    }
+    return $o . '</ul>';
 }

@@ -42,7 +42,7 @@ function page_accounts(): void {
             $id = (int) $a['id']; [$ic, $col, $pl] = PURPOSE_STYLE[$a['purpose']]; $share = $pos > 0 ? max($a['balance'], 0) / $pos * 100 : 0; $inM = $outM = 0;
             foreach ($s['txs'] as $t) { if ($t['status'] !== 'completed' || month_of($t['date']) !== $month) { continue; } $mine = (int) $t['account_id'] === $id; $dst = (int) $t['to_account_id'] === $id;
                 if ($t['type'] === 'income' && $mine) { $inM += $t['amount']; } elseif ($t['type'] === 'expense' && $mine) { $outM += $t['amount']; } elseif ($t['type'] === 'refund' && $mine) { $inM += $t['amount']; } elseif ($t['type'] === 'transfer') { if ($dst) { $inM += $t['amount']; } if ($mine) { $outM += $t['amount']; } } }
-            echo '<article class="card lift flex gap-4 p-5"><div class="shrink-0">' . gauge($share, fmt_short($a['balance']), ['w' => 84, 'h' => 168, 'liquid' => $col, 'label' => $a['name'] . ' share of your cash']) . '</div>'
+            $card = '<article class="card lift flex gap-4 p-5"><div class="shrink-0">' . gauge($share, fmt_short($a['balance']), ['w' => 84, 'h' => 168, 'liquid' => $col, 'label' => $a['name'] . ' share of your cash']) . '</div>'
                 . '<div class="flex min-w-0 flex-1 flex-col"><div class="flex flex-wrap items-center gap-1.5"><span class="inline-flex items-center gap-1 rounded-full bg-soft px-2.5 py-0.5 text-xs font-medium" style="color:' . $col . '">' . icon($ic, 'size-3.5') . e($a['label'] ?: $pl) . '</span></div>'
                 . '<h3 class="mt-2 truncate text-lg font-semibold" title="' . e($a['name']) . '">' . e($a['name']) . '</h3><p class="text-xs capitalize text-mute">' . e($a['type']) . ' · ' . e($pl) . '</p>'
                 . '<p class="num mt-2 text-2xl font-semibold tracking-tight ' . ($a['balance'] < 0 ? 'text-neg' : '') . '" data-count>' . e(fmt($a['balance'])) . '</p>'
@@ -52,6 +52,7 @@ function page_accounts(): void {
                 . '<button type="button" class="btn btn-sm" data-tx-new="transfer" data-account="' . $id . '">' . icon('arrow-left-right', 'size-3.5') . ' Move money</button>'
                 . dialog_form("acc-edit-$id", 'Edit', 'Edit ' . $a['name'], 'account-save', account_fields($a, $s), 'Save changes', 'btn btn-ghost btn-sm')
                 . confirm_btn('Remove', 'account-delete', ['id' => $id], 'Remove ' . $a['name'] . '?', 'An account with transactions is archived (kept in your history); an empty one is deleted.', 'Remove') . '</div></div></article>';
+            echo swipe_row($card, [['type' => 'open', 'open' => "#acc-bal-$id", 'label' => 'Balance', 'icon' => 'pencil', 'tone' => 'primary'], ['type' => 'open', 'open' => "#acc-edit-$id", 'label' => 'Edit', 'icon' => 'sliders-horizontal', 'tone' => 'dark']], [['action' => 'account-delete', 'fields' => ['id' => $id], 'label' => 'Remove', 'icon' => 'trash-2', 'tone' => 'danger', 'undo' => $a['name'] . ' removed']], $a['name'], ['class' => 'swipe-card']);
         }
         echo '</div>';
     }

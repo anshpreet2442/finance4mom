@@ -75,7 +75,10 @@
       if (w && !back && (flick || a > w * thr)) open(row, side); else close(row);
     }
     row._c.addEventListener('pointerup', end); row._c.addEventListener('pointercancel', end);
-    row._c.addEventListener('click', function (e) { if (row._swallow) { e.preventDefault(); e.stopPropagation(); return; } if (row.getAttribute('data-open')) { e.preventDefault(); e.stopPropagation(); close(row); } }, true);
+    row._c.addEventListener('click', function (e) { if (row._swallow) { e.preventDefault(); e.stopPropagation(); return; } if (row.getAttribute('data-open')) { e.preventDefault(); e.stopPropagation(); close(row); return; }
+      // a plain tap reveals the actions too (discoverable, and the only way for people who cannot swipe); taps on links, buttons and fields behave normally
+      if (row.hasAttribute('data-notap') || e.target.closest('a,button,input,select,textarea,label,summary,[data-no-swipe]') || !(e.pointerType === 'touch' || e.detail === 1 && matchMedia('(hover: none)').matches)) return;
+      var side = A.start ? 'start' : (A.end ? 'end' : ''); if (side) open(row, side); }, true);
     row._c.addEventListener('keydown', function (e) {
       if (e.target !== row._c) return;
       if (e.key === 'ArrowLeft') { e.preventDefault(); if (row.getAttribute('data-open') === 'start') close(row); else open(row, 'end'); }

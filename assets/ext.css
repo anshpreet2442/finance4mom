@@ -64,3 +64,19 @@
 @keyframes sb-pulse { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18, 1.5); } }
 @media (prefers-reduced-motion: reduce) { .star-border__ring, .star-border__glow { animation: none; } .star-border.is-pulse .star-border__pulse { animation: none; } }
 @supports not (background: conic-gradient(from 0deg, red, blue)) { .star-border__ring, .star-border__glow { display: none; } .star-border__base { background: var(--sb-color); opacity: .5; } }
+
+/* swipe rows wrapping a whole card (goals, accounts) */
+.swipe-card { border-radius: 1.75rem; background: transparent; }
+.swipe-card .swipe-row__content { background: transparent; }
+.swipe-card .swipe-row__actions { padding: 0; }
+.swipe-card .swipe-row__actions--end .swipe-act:last-child { border-radius: 0 1.75rem 1.75rem 0; }
+.swipe-card .swipe-row__actions--start .swipe-act:first-child { border-radius: 1.75rem 0 0 1.75rem; }
+@media (hover: hover) { .swipe-card { overflow: visible; } }
+.m-rows { list-style: none; margin: 0; padding: 0; }
+.m-row { display: flex; align-items: center; gap: .75rem; padding: .85rem 1.25rem; min-height: 64px; }
+.m-row__ic { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; flex: none; border-radius: 1rem; background: var(--soft); }
+.m-row__main { min-width: 0; flex: 1; }
+.m-row__main p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-row__t { font-size: .9375rem; font-weight: 600; } .m-row__s { font-size: .75rem; color: var(--mute); }
+.m-row__amt { flex: none; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: .9375rem; }
+.swipe-hint { padding: .5rem 1.25rem .25rem; font-size: .75rem; color: var(--mute); text-align: center; }

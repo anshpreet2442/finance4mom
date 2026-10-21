@@ -30,7 +30,7 @@ function page_goals(): void {
     else {
         echo '<div class="grid gap-4 md:grid-cols-2">';
         foreach ($long as $g) {
-            $id = (int) $g['id'];
+            $id = (int) $g['id']; ob_start();
             echo '<article class="card p-6"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="truncate text-lg font-semibold">' . e($g['name']) . '</h3><p class="text-xs text-mute">' . ($g['target_date'] ? 'Target ' . e(date_label($g['target_date'])) : 'No target date') . '</p></div><div class="flex gap-1.5">' . priority_badge($g['priority']) . ($g['complete'] ? badge('Complete', 'pos') : ($g['behind'] ? badge('Behind', 'warn') : ($g['target_date'] ? badge('On track', 'pos') : ''))) . '</div></div>'
                 . '<div class="mt-4">' . progress($g['percent'], $g['complete'] ? 'dark' : ($g['behind'] ? 'orange' : 'lime'), $g['name'] . ' progress') . '</div>'
                 . '<div class="num mt-2 flex justify-between text-sm"><span class="font-semibold">' . e(fmt($g['saved'])) . '</span><span class="text-mute">' . round($g['percent']) . '% of ' . e(fmt((int) $g['target_amount'])) . '</span></div>'
@@ -48,6 +48,7 @@ function page_goals(): void {
                 echo '</ul></details>';
             }
             echo '</article>';
+            echo swipe_row((string) ob_get_clean(), [['type' => 'open', 'open' => "#goal-add-$id", 'label' => 'Add money', 'icon' => 'piggy-bank', 'tone' => 'ok'], ['type' => 'open', 'open' => "#goal-edit-$id", 'label' => 'Edit', 'icon' => 'pencil', 'tone' => 'dark']], [['action' => 'goal-delete', 'fields' => ['id' => $id], 'label' => 'Delete', 'icon' => 'trash-2', 'tone' => 'danger', 'undo' => $g['name'] . ' deleted']], $g['name'], ['class' => 'swipe-card']);
         }
         echo '</div>';
     }
@@ -59,13 +60,14 @@ function page_goals(): void {
         foreach ($personal as $g) {
             $id = (int) $g['id']; $spent = 0; $added = 0;
             foreach ($s['contribs'] as $c) { if ($c['target_type'] === 'goal' && (int) $c['target_id'] === $id && month_of($c['date']) === $month) { if ($c['transaction_id'] && $c['amount'] < 0) { $spent -= $c['amount']; } elseif (!$c['transaction_id'] && $c['amount'] > 0) { $added += $c['amount']; } } }
-            $left = $g['monthly_limit'] ? (int) $g['monthly_limit'] - $spent : null;
+            $left = $g['monthly_limit'] ? (int) $g['monthly_limit'] - $spent : null; ob_start();
             echo '<article class="card p-6"><h3 class="text-lg font-semibold">' . e($g['name']) . '</h3><p class="num mt-1 text-3xl font-semibold">' . e(fmt($g['saved'])) . '</p><p class="text-xs text-mute">in the fund now</p>';
             if ($g['monthly_limit'] > 0) { echo '<div class="mt-4">' . progress($spent / $g['monthly_limit'] * 100, $spent > $g['monthly_limit'] ? 'neg' : ($spent / $g['monthly_limit'] > 0.85 ? 'orange' : 'lime'), 'Spending limit used') . '<p class="num mt-1.5 text-xs text-mute">' . e(fmt($spent)) . ' spent of ' . e(fmt((int) $g['monthly_limit'])) . ' limit in ' . e(month_label($month)) . ' · ' . ($left >= 0 ? e(fmt($left)) . ' left' : '<span class="text-neg">' . e(fmt(-$left)) . ' over</span>') . '</p></div>'; }
             echo '<p class="mt-3 text-xs text-mute">Allocation ' . ($g['monthly_target'] ? e(fmt((int) $g['monthly_target'])) . '/month' : 'not set') . ' · ' . e(fmt($added)) . ' added this month</p><div class="mt-4 flex flex-wrap gap-1.5 border-t border-line pt-4">'
                 . dialog_form("fund-add-$id", 'Add money', 'Add to ' . $g['name'], 'contribute', contribute_fields('goal', $id, $s, (int) $g['monthly_target'] ?: null), 'Save', 'btn btn-sm')
                 . dialog_form("fund-edit-$id", 'Edit', 'Edit fund', 'goal-save', goal_fields('personal', $g), 'Save changes', 'btn btn-ghost btn-sm')
                 . confirm_btn('Delete', 'goal-delete', ['id' => $id], 'Delete ' . $g['name'] . '?', 'Money left in the fund returns to your spendable balance.') . '</div></article>';
+            echo swipe_row((string) ob_get_clean(), [['type' => 'open', 'open' => "#fund-add-$id", 'label' => 'Add money', 'icon' => 'piggy-bank', 'tone' => 'ok'], ['type' => 'open', 'open' => "#fund-edit-$id", 'label' => 'Edit', 'icon' => 'pencil', 'tone' => 'dark']], [['action' => 'goal-delete', 'fields' => ['id' => $id], 'label' => 'Delete', 'icon' => 'trash-2', 'tone' => 'danger', 'undo' => $g['name'] . ' deleted']], $g['name'], ['class' => 'swipe-card']);
         }
         echo '</div>';
     }

@@ -8,7 +8,7 @@ function page_bills(): void {
     $upcoming = array_values(array_filter($live, fn($o) => $o['outstanding'] > 0 && !$o['overdue'] && $o['status'] !== 'partial' && $o['days'] <= 45));
     $paid = array_filter($live, fn($o) => $o['status'] === 'paid'); usort($paid, fn($a, $b) => $b['due_date'] <=> $a['due_date']); $paid = array_slice($paid, 0, 8);
     $bills = array_values(array_filter($s['bills'], fn($b) => $b['kind'] === 'bill'));
-    $notes = all('SELECT kind,title,body FROM {notifications} WHERE user_id=? AND is_read=0 ORDER BY due_date', [$u['id']]);
+    $notes = all('SELECT id,kind,title,body FROM {notifications} WHERE user_id=? AND is_read=0 ORDER BY due_date', [$u['id']]);
     $row = function ($o) use ($s) {
         $sub = $o['status'] === 'paid' ? '' : ($o['overdue'] ? (-$o['days']) . ' days late' : ($o['days'] === 0 ? 'due today' : 'in ' . $o['days'] . ' days'));
         return '<tr><td class="td"><div class="font-medium">' . e($o['bill']['name']) . '</div><div class="text-xs text-mute">' . e($o['bill']['frequency']) . '</div></td><td class="td num whitespace-nowrap text-mute">' . e(date_label($o['due_date'])) . '<div class="text-xs">' . e($sub) . '</div></td>'
@@ -16,7 +16,15 @@ function page_bills(): void {
             . '<td class="td text-right"><div class="flex justify-end gap-1">' . ($o['outstanding'] > 0 ? pay_button($s, $o) : '') . ($o['paid'] === 0 && $o['outstanding'] > 0 ? post_btn('Skip', 'occurrence-skip', ['id' => $o['id']], 'btn btn-ghost btn-sm') : '') . '</div></td></tr>';
     };
     $head = '<thead><tr class="border-b border-line"><th class="th">Bill</th><th class="th">Due</th><th class="th text-right">Amount</th><th class="th">Status</th><th class="th"><span class="sr-only">Actions</span></th></tr></thead>';
-    $table = fn(array $rows) => '<div class="relative overflow-x-auto"><table class="w-full min-w-[560px]">' . $head . '<tbody class="divide-y divide-line">' . implode('', array_map($row, $rows)) . '</tbody></table></div>';
+    $mrow = function ($o) {
+        $sub = $o['status'] === 'paid' ? 'paid' : ($o['overdue'] ? (-$o['days']) . ' days late' : ($o['days'] === 0 ? 'due today' : 'in ' . $o['days'] . ' days'));
+        $c = '<div class="m-row"><span class="m-row__ic">' . icon('bell-ring', 'size-4') . '</span><div class="m-row__main"><p class="m-row__t">' . e($o['bill']['name']) . '</p><p class="m-row__s">' . e(date_label($o['due_date'])) . ' · ' . e($sub) . ' · ' . e($o['bill']['frequency']) . '</p></div>'
+            . '<div class="text-right"><p class="m-row__amt">' . e(fmt((int) $o['amount'])) . '</p><div class="mt-1">' . status_badge($o['status']) . '</div></div></div>';
+        $start = $o['outstanding'] > 0 ? [['type' => 'open', 'open' => '#pay-' . (int) $o['id'], 'label' => 'Pay', 'icon' => 'circle-check', 'tone' => 'ok']] : [];
+        $end = $o['paid'] === 0 && $o['outstanding'] > 0 ? [['action' => 'occurrence-skip', 'fields' => ['id' => $o['id']], 'label' => 'Skip', 'icon' => 'arrow-right', 'tone' => 'warn']] : [];
+        return '<li>' . swipe_row($c, $start, $end, $o['bill']['name']) . '</li>';
+    };
+    $table = fn(array $rows) => '<ul class="m-rows swipe-list lg:hidden">' . implode('', array_map($mrow, $rows)) . '</ul><div class="relative overflow-x-auto max-lg:hidden"><table class="w-full min-w-[560px]">' . $head . '<tbody class="divide-y divide-line">' . implode('', array_map($row, $rows)) . '</tbody></table></div>';
     layout_start('Bills & Reminders', 'bills', $s);
     page_header('Bills & Reminders', 'Recurring bills create their own due dates. An unpaid bill is a liability, not an expense, until you pay it.', dialog_form('bill-new', icon('plus', 'size-4') . ' Add bill', 'New recurring bill', 'bill-save', bill_fields('bill', $s), 'Save', 'btn btn-dark'));
     $od = array_filter($live, fn($o) => $o['overdue']);
@@ -25,7 +33,8 @@ function page_bills(): void {
         . stat_card('Paid this month', e(fmt(array_sum(array_map(fn($o) => month_of($o['due_date']) === $month ? $o['paid'] : 0, $live)))), '', 'pos') . stat_card('Active bills', (string) count(array_filter($bills, fn($b) => $b['active']))) . '</div>';
     if ($notes) {
         echo '<div class="mt-5">'; card_open('Reminders', '', post_btn('Dismiss all', 'notifications-read', [], 'btn btn-ghost btn-sm')); echo '<ul class="space-y-2 text-sm">';
-        foreach ($notes as $n) { echo '<li class="flex flex-wrap items-center gap-2">' . badge($n['kind'] === 'overdue' ? 'Overdue' : 'Soon', $n['kind'] === 'overdue' ? 'neg' : 'warn') . '<span class="font-medium">' . e($n['title']) . '</span><span class="text-mute">' . e($n['body']) . '</span></li>'; }
+        foreach ($notes as $n) { echo '<li class="lg:hidden -mx-2">' . swipe_row('<div class="flex flex-wrap items-center gap-2 px-2 py-3">' . badge($n['kind'] === 'overdue' ? 'Overdue' : 'Soon', $n['kind'] === 'overdue' ? 'neg' : 'warn') . '<span class="font-medium">' . e($n['title']) . '</span><span class="text-mute">' . e($n['body']) . '</span></div>', [], [['action' => 'notification-dismiss', 'fields' => ['id' => $n['id']], 'label' => 'Dismiss', 'icon' => 'check', 'tone' => 'dark']], $n['title']) . '</li>'; }
+        foreach ($notes as $n) { echo '<li class="flex flex-wrap items-center gap-2 max-lg:hidden">' . badge($n['kind'] === 'overdue' ? 'Overdue' : 'Soon', $n['kind'] === 'overdue' ? 'neg' : 'warn') . '<span class="font-medium">' . e($n['title']) . '</span><span class="text-mute">' . e($n['body']) . '</span></li>'; }
         echo '</ul>'; card_close(); echo '</div>';
     }
     if ($attention) { echo '<div class="mt-5">'; card_flush_open('Needs attention'); echo $table($attention) . '</div></section></div>'; }

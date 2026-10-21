@@ -140,6 +140,7 @@ function swipe_row(string $content, array $start = [], array $end = [], string $
     $mk = function (array $a): string {
         $cls = 'swipe-act swipe-act--' . ($a['tone'] ?? 'dark'); $inner = icon($a['icon'] ?? 'ellipsis', 'size-5') . '<span>' . e($a['label'] ?? '') . '</span>';
         if (($a['type'] ?? 'post') === 'link') { return '<a class="' . $cls . '" href="' . e($a['href'] ?? '#') . '">' . $inner . '</a>'; }
+        if (($a['type'] ?? 'post') === 'attr') { return '<button type="button" class="' . $cls . '" ' . $a['attrs'] . ' data-swipe-open>' . $inner . '</button>'; }
         if (($a['type'] ?? 'post') === 'open') { return '<button type="button" class="' . $cls . '" data-open="' . e($a['open']) . '" data-swipe-open>' . $inner . '</button>'; }
         $h = ''; foreach (($a['fields'] ?? []) as $k => $v) { $h .= '<input type="hidden" name="' . e($k) . '" value="' . e((string) $v) . '">'; }
         return '<form method="post" action="' . e(url('/do/' . $a['action'])) . '">' . csrf_field() . '<input type="hidden" name="_back" value="' . e(current_url()) . '">' . $h
