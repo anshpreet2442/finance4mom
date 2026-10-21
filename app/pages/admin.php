@@ -110,7 +110,7 @@ function page_admin_billing(): void {
     $users = all("SELECT id,name,email,role,billing_enforced FROM {users} WHERE status='active' ORDER BY name"); foreach ($users as $x) { billing_sync((int) $x['id']); }
     $opts = []; foreach ($users as $x) { $opts[$x['id']] = $x['name'] . ' (' . $x['email'] . ')'; }
     $status = in_array(get_str('status', 10), ['pending', 'paid', 'waived', 'cancelled'], true) ? get_str('status', 10) : '';
-    $charges = all('SELECT c.*, u.name AS uname, u.email AS uemail FROM {charges} c JOIN {users} u ON u.id=c.user_id WHERE (? = \'\' OR c.status = ?) ORDER BY (c.status=\'pending\') DESC, c.due_date DESC, c.id DESC LIMIT 150', [$status, $status]);
+    $charges = all('SELECT c.*, u.name AS uname, u.email AS uemail FROM {charges} c JOIN {users} u ON u.id=c.user_id ' . ($status !== '' ? 'WHERE c.status = ?' : '') . ' ORDER BY (c.status=\'pending\') DESC, c.due_date DESC, c.id DESC LIMIT 150', $status !== '' ? [$status] : []);
     $plans = all('SELECT p.*, u.name AS uname FROM {charge_plans} p JOIN {users} u ON u.id=p.user_id ORDER BY p.active DESC, p.id DESC');
     $chargeFields = [['name' => 'user_id', 'label' => 'Charge to', 'type' => 'select', 'required' => true, 'options' => $opts], ['name' => 'title', 'label' => 'What is it for?', 'required' => true, 'placeholder' => 'e.g. Phone bill share'],
         ['name' => 'description', 'label' => 'Note (optional)', 'type' => 'textarea'], ['name' => 'amount', 'label' => 'Amount (₹)', 'type' => 'money', 'required' => true, 'half' => true, 'currency' => '₹'], ['name' => 'due_date', 'label' => 'Due date', 'type' => 'date', 'required' => true, 'half' => true, 'value' => day_after_n($today, 7)]];

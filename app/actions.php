@@ -261,7 +261,7 @@ function do_admin_plan_save(array $u): string {
     admin_save_plan((int) $u['id'], in_opt_id('id'), in_id('user_id', 'person'), in_str('title', 120, true, 'What it is for'), in_opt('description', 300), in_money('amount'), in_int('day_of_month', 1, 28, 5), (string) in_month('start_month'), in_month('end_month', false), in_bool('active'));
     return 'Monthly charge saved.';
 }
-function do_admin_plan_toggle(array $u): string { $id = in_id('id'); run('UPDATE {charge_plans} SET active=? WHERE id=?', [in_bool('active') ? 1 : 0, $id]); audit('billing.plan.toggle', "plan#$id"); return 'Monthly charge updated.'; }
+function do_admin_plan_toggle(array $u): string { $id = in_id('id'); if (!one('SELECT id FROM {charge_plans} WHERE id=?', [$id])) { throw new UserError('Monthly charge not found.'); } run('UPDATE {charge_plans} SET active=? WHERE id=?', [in_bool('active') ? 1 : 0, $id]); audit('billing.plan.toggle', "plan#$id"); return 'Monthly charge updated.'; }
 function do_admin_charge_action(array $u): string { return admin_charge_action(in_id('id'), in_enum('action', ['waive', 'cancel', 'paid', 'waive_fee']), in_opt('note', 300)); }
 function do_admin_billing_settings(array $u): string {
     $enabled = in_bool('billing_enabled') ? '1' : '0'; $grace = in_int('grace_days', 0, 60, 5); $type = in_enum('late_fee_type', ['none', 'flat', 'percent']);

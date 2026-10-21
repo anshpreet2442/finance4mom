@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
-    $t = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+    $t = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=' . DB_COLLATION;
     $ts = 'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP';
     return [
     'meta' => "CREATE TABLE IF NOT EXISTS {meta} (k VARCHAR(40) PRIMARY KEY, v VARCHAR(255) NOT NULL) $t",
@@ -259,8 +259,17 @@ function mfnc_migrate(): void {
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }
     $defaults = ['billing_enabled' => '1', 'grace_days' => '5', 'late_fee_type' => 'none', 'late_fee_flat' => '0', 'late_fee_percent' => '0', 'restrict_after_days' => '14', 'lock_after_days' => '30'];
     foreach ($defaults as $k => $v) { run('INSERT IGNORE INTO {settings} (k, v) VALUES (?, ?)', [$k, $v]); }
-    // Tables created by older versions or a different server default can mix collations ("Illegal mix of collations" on joins): make them all the same.
-    $st = db()->prepare('SELECT DISTINCT t.TABLE_NAME FROM information_schema.TABLES t LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME AND c.COLLATION_NAME IS NOT NULL AND c.COLLATION_NAME <> ? WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME LIKE ? AND t.TABLE_TYPE = ? AND (t.TABLE_COLLATION <> ? OR c.COLUMN_NAME IS NOT NULL)');
-    $st->execute(['utf8mb4_unicode_ci', '%' . addcslashes(TABLE_SUFFIX, '_%') . '', 'BASE TABLE', 'utf8mb4_unicode_ci']);
-    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $tn) { db()->exec('ALTER TABLE `' . str_replace('`', '', $tn) . '` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'); }
+    mfnc_fix_collations();
+}
+
+/** Converts the database default and every app table/column to DB_COLLATION. Idempotent; a no-op (one query) when nothing differs. */
+function mfnc_fix_collations(): void {
+    $pdo = db();
+    try { $pdo->exec('ALTER DATABASE `' . str_replace('`', '', DB_NAME) . '` CHARACTER SET utf8mb4 COLLATE ' . DB_COLLATION); } catch (PDOException) {} // not every shared-hosting user may alter the database itself
+    $st = $pdo->prepare('SELECT DISTINCT t.TABLE_NAME FROM information_schema.TABLES t LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME AND c.COLLATION_NAME IS NOT NULL AND c.COLLATION_NAME <> ? WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME LIKE ? AND t.TABLE_TYPE = ? AND (t.TABLE_COLLATION <> ? OR c.COLUMN_NAME IS NOT NULL)');
+    $st->execute([DB_COLLATION, '%' . addcslashes(TABLE_SUFFIX, '_%'), 'BASE TABLE', DB_COLLATION]);
+    $tables = $st->fetchAll(PDO::FETCH_COLUMN); if (!$tables) { return; }
+    $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+    try { foreach ($tables as $tn) { $pdo->exec('ALTER TABLE `' . str_replace('`', '', $tn) . '` CONVERT TO CHARACTER SET utf8mb4 COLLATE ' . DB_COLLATION); } }
+    finally { $pdo->exec('SET FOREIGN_KEY_CHECKS=1'); }
 }

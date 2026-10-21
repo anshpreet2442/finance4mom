@@ -9,8 +9,8 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 - Screenshots go to /tmp/claude-0/-home-user-finance4mom/971b8b9a-ce99-5b2a-921e-b9b2f006723f/scratchpad/shots/ (Playwright, chromium at /opt/pw-browsers/chromium, NODE module path: $(npm root -g)/playwright)
 
 ## A. Fixes
-- [ ] A1 Collation bug: "Illegal mix of collations (utf8mb4_general_ci / utf8mb4_unicode_ci)" (db.php) on real DBs, esp. /admin/billing. Make every table/column/connection collation consistent (explicit COLLATE in schema, SET NAMES ... COLLATE, migration that converts existing tables), no mixed-collation comparisons/JOINs.
-- [ ] A2 Inspect /admin/billing end to end (all actions, forms, empty/error states) and fix errors
+- [x] A1 (builder) Collation bug: "Illegal mix of collations (utf8mb4_general_ci / utf8mb4_unicode_ci)" (db.php) on real DBs, esp. /admin/billing. Make every table/column/connection collation consistent (explicit COLLATE in schema, SET NAMES ... COLLATE, migration that converts existing tables), no mixed-collation comparisons/JOINs.
+- [x] A2 (builder) Inspect /admin/billing end to end (all actions, forms, empty/error states) and fix errors
 - [ ] A3 Sweep every page desktop + mobile for UI/UX bugs (overflow, empty space, tiny chart labels, a11y, focus, contrast, dark mode), fix them
 ## B. Features
 - [ ] B1 SwipeRow (vanilla JS port, assets/swiperow.js + css) on mobile list rows: transactions, bills, dues, goals, accounts. Delete/archive/pay actions via existing POST actions + CSRF

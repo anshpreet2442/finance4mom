@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+const DB_COLLATION = 'utf8mb4_unicode_ci';
+
 /** Lazily created PDO connection. */
 function db(): PDO {
     static $pdo = null;
@@ -10,13 +12,16 @@ function db(): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ];
+        // One collation everywhere: the connection, the database default and every table/column (see mfnc_fix_collations). A server whose default is
+        // utf8mb4_general_ci (or 0900_ai_ci) would otherwise give literals/parameters a different collation than our columns ("Illegal mix of collations", 1267).
+        $opts[PDO::MYSQL_ATTR_INIT_COMMAND] = 'SET NAMES utf8mb4 COLLATE ' . DB_COLLATION;
         $base = 'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';charset=utf8mb4';
         try {
             $pdo = new PDO($base . ';dbname=' . DB_NAME, DB_USER, DB_PASS, $opts);
         } catch (PDOException $e) {
             if ((int) $e->getCode() !== 1049) { throw $e; }          // 1049 = unknown database
             $tmp = new PDO($base, DB_USER, DB_PASS, $opts);
-            $tmp->exec('CREATE DATABASE IF NOT EXISTS `' . str_replace('`', '', DB_NAME) . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+            $tmp->exec('CREATE DATABASE IF NOT EXISTS `' . str_replace('`', '', DB_NAME) . '` CHARACTER SET utf8mb4 COLLATE ' . DB_COLLATION);
             $pdo = new PDO($base . ';dbname=' . DB_NAME, DB_USER, DB_PASS, $opts);
         }
         $pdo->exec("SET time_zone = '+00:00', sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION'");
@@ -30,8 +35,17 @@ function sqlt(string $sql): string {
 }
 
 function q(string $sql, array $params = []): PDOStatement {
-    $st = db()->prepare(sqlt($sql));
-    $st->execute($params);
+    try {
+        $st = db()->prepare(sqlt($sql));
+        $st->execute($params);
+    } catch (PDOException $e) {
+        // 1267/1271 = illegal mix of collations: a table or column was created with another default (older version, shared host). Repair once, retry once.
+        static $healed = false;
+        $code = (int) ($e->errorInfo[1] ?? 0);
+        if (!in_array($code, [1267, 1271], true) || $healed || db()->inTransaction()) { throw $e; }
+        $healed = true; mfnc_fix_collations();
+        $st = db()->prepare(sqlt($sql)); $st->execute($params);
+    }
     return $st;
 }
 function all(string $sql, array $params = []): array { return q($sql, $params)->fetchAll(); }

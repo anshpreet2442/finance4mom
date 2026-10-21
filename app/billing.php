@@ -129,8 +129,9 @@ function admin_charge_action(int $chargeId, string $action, ?string $note): stri
     $map = ['waive' => ['waived', 'billing.charge.waive', 'Charge waived.'], 'cancel' => ['cancelled', 'billing.charge.cancel', 'Charge cancelled.'], 'paid' => ['paid', 'billing.charge.manual_paid', 'Marked as paid (received outside the app).']];
     if (!isset($map[$action])) { throw new UserError('Unknown action.'); }
     [$st, $audit, $msg] = $map[$action];
-    run("UPDATE {charges} SET status=?, note=?, paid_at=IF(?='paid', UTC_TIMESTAMP(), NULL), paid_via=IF(?='paid','manual',NULL) WHERE id=? AND status='pending'", [$st, $note, $st, $st, $chargeId]);
+    run("UPDATE {charges} SET status=?, note=?, paid_at=" . ($st === 'paid' ? 'UTC_TIMESTAMP()' : 'NULL') . ", paid_via=" . ($st === 'paid' ? "'manual'" : 'NULL') . " WHERE id=? AND status='pending'", [$st, $note, $chargeId]);
     run("UPDATE {payments} SET status='cancelled' WHERE charge_id=? AND status='pending'", [$chargeId]);
+    run('DELETE FROM {notifications} WHERE user_id=? AND dedupe_key IN (?,?)', [$c['user_id'], "charge:$chargeId:overdue", "charge:$chargeId:new"]); // the reminders no longer apply
     audit($audit, "charge#$chargeId", (string) $note); return $msg;
 }
 

@@ -317,5 +317,13 @@ $_SERVER['HTTP_X_MFNC_SPA'] = '1'; check('the router header is recognised', is_s
 $jh = jelly(['a' => ['label' => 'One', 'href' => '/x'], 'b' => ['label' => 'Two', 'href' => '/y']], 'b', ['label' => 'Pick']);
 check('jelly renders a radiogroup with the active chip checked', str_contains($jh, 'role="radiogroup"') && str_contains($jh, 'data-value="b" tabindex="0"') && substr_count($jh, 'aria-checked="true"') === 1);
 check('jelly link chips are anchors and escape labels', str_contains($jh, '<a href="/x"') && !str_contains(jelly(['a' => ['label' => '<b>x</b>']], 'a'), '<b>x</b>'));
+section('collations (A1)');
+eq(val('SELECT @@collation_connection'), DB_COLLATION, 'connection collation is pinned');
+db()->exec(sqlt('ALTER TABLE {users} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci')); db()->exec(sqlt('ALTER TABLE {settings} MODIFY v TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL'));
+mfnc_fix_collations();
+eq((int) val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE ? AND TABLE_COLLATION <> ?', ['%\\_mfnt', DB_COLLATION]), 0, 'all tables converted to one collation');
+eq((int) val('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE ? AND COLLATION_NAME IS NOT NULL AND COLLATION_NAME <> ?', ['%\\_mfnt', DB_COLLATION]), 0, 'all columns converted to one collation');
+check('joined string comparison across tables works', is_array(all('SELECT u.email FROM {users} u JOIN {settings} s ON s.k = u.name WHERE u.email = ?', ['x'])));
+
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);
