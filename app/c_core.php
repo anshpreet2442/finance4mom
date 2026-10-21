@@ -85,11 +85,12 @@ function c_route(string $path): void {
         if ($path === '/layout/ai') { layout_ai_http(); }
         if ($path === '/voice/tts') { voice_http_tts(); }
         if ($path === '/voice/stt') { voice_http_stt(); }
+        if ($path === '/admin/payment-page/preview') { paypage_preview_http(); }
         return;
     }
     if ($m !== 'GET' && $m !== 'HEAD') { return; }
     $pages = ['/layout' => 'page_layout', '/layout/preview' => 'page_layout_preview', '/layout/wire.png' => 'layout_wire_png', '/share' => 'page_share', '/share/qr' => 'share_qr_http', '/share/new' => 'page_share_new', '/voice/status' => 'voice_http_status',
-        '/pdf/report' => 'pdf_http_report', '/pdf/analysis' => 'pdf_http_analysis', '/admin/voice' => 'page_admin_voice', '/admin/payment-page' => 'page_admin_paypage', '/admin/payment-page/preview' => 'paypage_preview_http', '/voice/audio' => 'voice_http_audio', '/pay/page' => 'paypage_http_public'];
+        '/pdf/report' => 'pdf_http_report', '/pdf/analysis' => 'pdf_http_analysis', '/admin/voice' => 'page_admin_voice', '/admin/payment-page' => 'page_admin_paypage', '/voice/audio' => 'voice_http_audio', '/pay/page' => 'paypage_http_public'];
     if (!isset($pages[$path])) { return; }
     if (($u = current_user()) && billing_level($u) === 3 && !str_starts_with($path, '/admin')) { redirect(url('/dues')); }
     $pages[$path](); exit;

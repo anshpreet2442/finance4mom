@@ -180,7 +180,7 @@ function start_payment(int $uid, int $chargeId): string {
             'customer' => ['name' => $u['name'], 'email' => $u['email']], 'expires_in_minutes' => 30, 'redirect_mode' => 'signed',
             'success_redirect_url' => abs_url('/dues/return'), 'failure_redirect_url' => abs_url('/dues/return'),
             'metadata' => ['app' => 'mfnc', 'charge_id' => (int) $c['id'], 'user_id' => $uid],
-        ]);
+        ] + (function_exists('paypage_extra') ? paypage_extra($c, $u) : []));
     } catch (PayuError $e) {
         // not retried automatically: the call is not idempotent. The real reason goes to the log; the payer gets a clear message.
         throw new UserError($e->apiCode === 'not_configured' ? 'Online payment is not set up yet. Please ask the administrator.' : 'The payment page could not be opened (' . ($e->apiCode ?: 'gateway') . '). Please try again in a minute, or ask the administrator.');
