@@ -80,7 +80,7 @@ function import_page_preview(array $u, array $s, string $token): void {
         $role = ['summary' => ['Summary', 'imp-role--sum'], 'transactions' => ['Transactions', 'imp-role--tx'], 'unknown' => ['Skipped', 'imp-role--no']][$sh['role']] ?? ['Skipped', 'imp-role--no'];
         $sheets .= '<li><span class="imp-sheet__n">' . e($sh['name']) . ($sh['state'] !== 'visible' ? ' <i class="imp-hid">' . e($sh['state'] === 'veryHidden' ? 'very hidden' : 'hidden') . '</i>' : '') . '</span><span class="imp-role ' . $role[1] . '">' . e($role[0]) . '</span><span class="imp-sheet__d">' . e($sh['note']) . '</span></li>';
     }
-    $sheets .= '</ul></section>';
+    $sheets .= '</ul></section>'; if (empty($stmt['sheets'])) { $sheets = ''; }   // a JSON import has no sheets: no empty card
     if (empty($stmt['source'])) {
         page_header('We could not recognise this file', 'Nothing was imported.', btn('Try another file', url('/import'), 'btn', 'upload'));
         echo '<section class="card imp-card"><p class="imp-p">The file was read, but none of its sheets looks like a statement we know. Supported today: <b>' . e(implode(', ', array_map(fn($a) => $a['title'] ?? $a['label'], import_adapters()))) . '</b>. '

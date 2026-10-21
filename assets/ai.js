@@ -171,10 +171,11 @@
       var vv = w.visualViewport, vh = vv ? vv.height : w.innerHeight, kb = vv && (w.innerHeight - vv.height) > 140, top = root.getBoundingClientRect().top + w.scrollY, reserve = 14;
       function shown(x) { return x && x.getClientRects().length > 0 && w.getComputedStyle(x).visibility !== 'hidden'; } var nav = d.querySelector('.m-pill'), dock = d.querySelector('.mf-dock'), el2 = shown(nav) ? nav : (shown(dock) ? dock : null);
       if (el2 && !kb) { var r = el2.getBoundingClientRect(); reserve = Math.max(14, w.innerHeight - r.top + 10); }
-      var h = Math.max(400, Math.round(vh - (top - w.scrollY) - reserve));
+      var h = Math.max(vh < 600 ? 220 : 400, Math.round(vh - (top - w.scrollY) - reserve));
       root.style.setProperty('--ai-h', h + 'px'); root.style.setProperty('--ai-mb', Math.round(reserve) + 'px');
     }
     fit(); w.addEventListener('resize', fit); w.addEventListener('orientationchange', fit); if (w.visualViewport) { w.visualViewport.addEventListener('resize', fit); }
+    root.addEventListener('focusin', function () { setTimeout(fit, 80); setTimeout(fit, 400); }); root.addEventListener('focusout', function () { setTimeout(fit, 120); });   // the pill nav hides while typing (ai.css)
     d.addEventListener('mfnc:page', function () { setTimeout(fit, 60); }); setTimeout(fit, 250); setTimeout(fit, 900);
     // ---------- scrolling: stay at the bottom while it streams, unless the person scrolled up ----------
     function atBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 140; }

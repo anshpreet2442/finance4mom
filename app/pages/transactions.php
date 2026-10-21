@@ -96,11 +96,11 @@ function page_transactions(): void {
 function page_transactions_export(): void {
     $u = require_login(); $s = load_snapshot((int) $u['id']); $f = parse_tx_filter(); $acc = array_column($s['accounts'], 'name', 'id');
     header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename="transactions-' . $s['today'] . '.csv"');
-    $safe = function ($v) { $v = (string) ($v ?? ''); return ($v !== '' && (preg_match('/^[=+@]/', $v) || (str_starts_with($v, '-') && !preg_match('/^-\d/', $v)))) ? "'" . $v : $v; };
+    $safe = 'csv_safe_cell';
     $out = fopen('php://output', 'w'); fputcsv($out, ['date', 'type', 'amount', 'category', 'account', 'description', 'payment_method', 'notes', 'status', 'to_account', 'remarks'], ',', '"', '');
     foreach (filter_txs($s, $f) as $t) {
         $cat = $t['category_id'] ? explode(' › ', cat_path($s, (int) $t['category_id'])) : [];
-        fputcsv($out, [$t['date'], $t['type'], money_input((int) $t['amount']), $cat ? end($cat) : '', $acc[$t['account_id']] ?? '', $safe($t['description']), $t['payment_method'], $safe($t['notes']), $t['status'], $t['to_account_id'] ? ($acc[$t['to_account_id']] ?? '') : '', $safe($t['remarks'] ?? '')], ',', '"', '');
+        fputcsv($out, [$t['date'], $t['type'], money_input((int) $t['amount']), $safe($cat ? end($cat) : ''), $safe($acc[$t['account_id']] ?? ''), $safe($t['description']), $safe($t['payment_method']), $safe($t['notes']), $t['status'], $safe($t['to_account_id'] ? ($acc[$t['to_account_id']] ?? '') : ''), $safe($t['remarks'] ?? '')], ',', '"', '');
     }
     fclose($out);
 }

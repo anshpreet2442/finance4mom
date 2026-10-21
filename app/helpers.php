@@ -226,3 +226,6 @@ function audit(string $action, string $target = '', string $detail = ''): void {
     $u = $GLOBALS['__user'] ?? null;
     try { run('INSERT INTO {audit_log} (actor_id, action, target, detail, ip) VALUES (?,?,?,?,?)', [$u['id'] ?? null, $action, mb_substr($target, 0, 190), mb_substr($detail, 0, 500), client_ip()]); } catch (Throwable) {}
 }
+
+/** A text cell for a CSV that may be opened in a spreadsheet: values that would run as a formula get a leading apostrophe. Plain negative numbers ("-12.50") stay numbers. */
+function csv_safe_cell($v): string { $v = (string) ($v ?? ''); return ($v !== '' && (preg_match('/^[=+@\t\r]/', $v) || (str_starts_with($v, '-') && !preg_match('/^-\d+(\.\d+)?$/', $v)))) ? "'" . $v : $v; }

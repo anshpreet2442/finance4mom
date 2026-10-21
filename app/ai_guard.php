@@ -65,6 +65,12 @@ function ai_validate_request(array $body): ?string {
         if (!is_object($w->output_config)) { return 'output_config: Input should be a valid dictionary'; }
         if (isset($w->output_config->effort) && !in_array($w->output_config->effort, ['low', 'medium', 'high', 'xhigh', 'max'], true)) { return 'output_config.effort: Input should be \'low\', \'medium\', \'high\', \'xhigh\' or \'max\''; }
     }
+    if (isset($w->temperature)) {
+        if (!(is_int($w->temperature) || is_float($w->temperature)) || $w->temperature < 0 || $w->temperature > 1) { return 'temperature: Input should be a number between 0 and 1'; }
+        if (isset($w->thinking) && ($w->thinking->type ?? '') !== 'disabled' && (float) $w->temperature !== 1.0) { return 'temperature: `temperature` may only be set to 1 when thinking is enabled'; }
+    }
+    if (isset($w->stream) && !is_bool($w->stream)) { return 'stream: Input should be a valid boolean'; }
+    if (preg_match_all('/"cache_control"\s*:/', $json) > 4) { return 'A maximum of 4 blocks with cache_control may be provided. Found ' . preg_match_all('/"cache_control"\s*:/', $json) . '.'; }
     // ---- system ----
     if (isset($w->system)) {
         if (is_array($w->system)) { foreach ($w->system as $i => $b) { if (!is_object($b) || ($b->type ?? '') !== 'text' || !is_string($b->text ?? null) || trim($b->text) === '') { return "system.$i: text content blocks must be non-empty"; } } }
