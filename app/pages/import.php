@@ -8,15 +8,20 @@ function page_import(): void {
     if (isset($_GET['done'])) { import_page_done($u, $s, (int) get_str('done', 12)); return; }
     layout_start('Import', 'transactions', $s);
     page_header('Import transactions', 'Bring in a bank or UPI statement instead of typing every payment.', btn('Back to transactions', url('/transactions'), 'btn', 'arrow-left'));
-    $max = import_upload_max();
+    $max = import_upload_max(); $tab = get_str('tab', 10) === 'json' ? 'json' : 'file';
+    echo '<nav class="imp-tabs" aria-label="Import method"><a class="imp-tab' . ($tab === 'file' ? ' is-on' : '') . '" href="' . e(url('/import')) . '"' . ($tab === 'file' ? ' aria-current="page"' : '') . '>' . icon('file', 'size-4') . ' Statement file</a>'
+        . '<a class="imp-tab' . ($tab === 'json' ? ' is-on' : '') . '" data-imp-jsonlink href="' . e(url('/import', ['tab' => 'json'])) . '#json"' . ($tab === 'json' ? ' aria-current="page"' : '') . '>' . icon('sparkles', 'size-4') . ' Use your own AI (JSON)</a></nav>';
+    if ($tab === 'json') { echo import_json_panel_html(); }
+    if ($tab === 'file') {
     echo '<div class="imp-wrap"><section class="card imp-card"><h2 class="imp-h">' . icon('upload', 'size-5') . ' Upload a statement</h2>'
         . '<p class="imp-p">Nothing is saved yet. You will see exactly what was found, check it against the statement\'s own totals, and choose accounts and categories before anything is added.</p>'
         . str_replace('<form ', '<form data-b64="' . e(url('/import/b64')) . '" ', form_open('import-upload', 'imp-up', true)) . '<label class="label" for="imp-file">Statement file</label><input id="imp-file" class="input" type="file" name="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required data-max="' . $max . '">'
         . '<p class="imp-hint">.xlsx or .csv, up to ' . max(1, (int) round($max / 1048576)) . ' MB. The file is read on the server and not kept; the parsed preview is deleted after an hour or when you finish.</p>'
         . '<div class="imp-prog" data-imp-prog hidden aria-live="polite"></div><p class="imp-err" data-imp-err role="alert" hidden></p><button class="btn btn-primary" data-imp-upload>' . icon('search', 'size-4') . ' Read statement</button></form></section>';
     echo '<section class="card imp-card"><h2 class="imp-h">' . icon('file', 'size-5') . ' Supported statements</h2><ul class="imp-src">';
-    foreach (import_adapters() as $a) { echo '<li>' . import_badge(['source' => $a['key']], 'src', true) . '<span class="imp-src__t"><b>' . e($a['title'] ?? $a['label']) . '</b><span>' . e($a['accept'] ?? '') . '</span></span></li>'; }
-    echo '</ul><p class="imp-p">Other apps (PhonePe, Google Pay, bank CSV files) can be added without changing anything else. A CSV with the same column headings as the Paytm sheet also works.</p></section></div>';
+    foreach (import_adapters() as $a) { if ($a['key'] === 'json') { continue; } echo '<li>' . import_badge(['source' => $a['key']], 'src', true) . '<span class="imp-src__t"><b>' . e($a['title'] ?? $a['label']) . '</b><span>' . e($a['accept'] ?? '') . '</span></span></li>'; }
+    echo '</ul><p class="imp-p">Other apps (PhonePe, Google Pay, bank CSV files) can be added without changing anything else. A CSV with the same column headings as the Paytm sheet also works. Have a PDF, a photo or any other statement? <a href="' . e(url('/import', ['tab' => 'json'])) . '#json">Let your own AI turn it into JSON</a>.</p></section></div>';
+    }
     $hist = all('SELECT * FROM {imports} WHERE user_id=? ORDER BY id DESC LIMIT 30', [$uid]);
     echo '<section class="card imp-card imp-hist" id="history"><h2 class="imp-h">' . icon('history', 'size-5') . ' Import history</h2>';
     if (!$hist) { echo '<p class="imp-p">No imports yet.</p>'; }
@@ -83,11 +88,11 @@ function import_page_preview(array $u, array $s, string $token): void {
     }
     $ch = import_default_choices($s, $stmt); $plan = import_plan($uid, $stmt, $ch);
     $ag = import_account_groups($stmt); $tg = import_tag_groups($stmt); $rec = import_reconcile($stmt);
-    $n = count($stmt['rows']); $dup = count(array_filter($plan, fn($p) => $p['dup'])); $ready = $n - $dup;
+    $n = count($stmt['rows']); $dup = count(array_filter($plan, fn($p) => $p['dup'])); $ready = count(array_filter($plan, fn($p) => $p['include'] && !$p['dup']));
     $dates = array_column($stmt['rows'], 'date'); sort($dates); $paid = $recv = 0; $paidN = $recvN = 0; $hints = 0;
-    foreach ($stmt['rows'] as $r) { if ($r['dir'] === 'out') { $paid += $r['amount']; $paidN++; } else { $recv += $r['amount']; $recvN++; } if ($r['hint']) { $hints++; } }
-    $label = $stmt['label'];
-    page_header('Review your ' . $label . ' statement', 'Nothing has been added yet. Check the numbers, choose where things go, then confirm.', btn('Cancel', url('/import'), 'btn btn-ghost'));
+    foreach ($stmt['rows'] as $r) { if (($r['xt'] ?? '') === 'transfer') { continue; } if ($r['dir'] === 'out') { $paid += $r['amount']; $paidN++; } else { $recv += $r['amount']; $recvN++; } if ($r['hint']) { $hints++; } }
+    $label = $stmt['label']; $isJson = $stmt['source'] === 'json';
+    page_header($isJson ? 'Review your JSON import' : 'Review your ' . $label . ' statement', 'Nothing has been added yet. Check the numbers, choose where things go, then confirm.', btn('Cancel', url('/import'), 'btn btn-ghost'));
     // ---- overview ----
     echo '<section class="card imp-card imp-over"><div class="imp-over__top">' . import_badge(['source' => $stmt['source']], 'src', true) . '<span class="imp-file">' . e($pv['filename']) . '</span></div><dl class="imp-tiles">'
         . ($stmt['holder'] ? '<div><dt>Account holder</dt><dd>' . e($stmt['holder']) . '</dd></div>' : '')
@@ -97,7 +102,8 @@ function import_page_preview(array $u, array $s, string $token): void {
         . '<div class="' . ($dup ? 'is-dup' : '') . '"><dt>Already imported before</dt><dd>' . $dup . ($dup ? ' <small>will be skipped</small>' : ' <small>none</small>') . '</dd></div><div><dt>Ready to import</dt><dd id="imp-ready-top">' . $ready . '</dd></div></dl></section>';
     echo $sheets;
     // ---- reconciliation ----
-    if ($rec === null) {
+    if ($isJson) { echo import_json_checks_html($stmt, $plan, $token); }
+    elseif ($rec === null) {
         echo '<section class="card imp-card" id="reconcile"><h2 class="imp-h">' . icon('info', 'size-5') . ' Double-check</h2><p class="imp-p">This file has no Summary sheet, so the rows cannot be compared with the statement\'s own totals. Look through the list below before importing.</p></section>';
     } else {
         $bad = array_filter($rec, fn($l) => !$l['ok']);
@@ -138,6 +144,7 @@ function import_page_preview(array $u, array $s, string $token): void {
     echo '<section class="card imp-card" id="balances"><h2 class="imp-h">' . icon('wallet', 'size-5') . ' What should happen to your balances?</h2><div class="imp-modes">'
         . '<label class="imp-mode"><input type="radio" name="mode" value="keep" checked><span><b>Keep my balances as they are</b><small>Recommended when the account already shows what the bank shows. The history is added for reports and analysis, and a balance correction (shown as a correction, not income or expense) keeps today\'s balance unchanged.</small></span></label>'
         . '<label class="imp-mode"><input type="radio" name="mode" value="reflect"><span><b>Let these transactions change my balances</b><small>Use this when the account does not include these payments yet. Existing accounts go up and down by the imported amounts; new accounts start at zero on the first date.</small></span></label></div></section>';
+    if ($isJson) { echo import_json_extras_html($stmt); }
     // categories
     echo '<section class="card imp-card" id="categories"><h2 class="imp-h">' . icon('layers', 'size-5') . ' Categories</h2><p class="imp-p">Each tag from the statement is matched to one of your categories by name. Change a match, or create a category from the tag. Money coming in becomes <b>income</b>, money going out becomes an <b>expense</b>; cashback counts as income.</p><div class="imp-maps">';
     foreach ($tg as $i => $g) {
@@ -160,15 +167,16 @@ function import_page_preview(array $u, array $s, string $token): void {
     foreach ($plan as $p) {
         $r = $p['row']; $q = mb_strtolower(implode(' ', [$r['payee'], $r['details'], $r['other'], $r['tag'], $r['account'], $r['ref'], $r['comment'], fmt($r['amount'])]));
         $hint = $r['hint'] ? (isset($r['hint']['pair']) ? 'Matches payment #' . $r['hint']['pair'] . ' in your other account: probably money moved between your own accounts.' : 'Sent to or from you: possibly a transfer between your own accounts.') : '';
-        echo '<li class="imp-row' . ($p['dup'] ? ' is-dup' : '') . '" data-n="' . (int) $r['n'] . '" data-ti="' . $p['ti'] . '" data-dir="' . $r['dir'] . '" data-ai="' . $p['ai'] . '" data-amt="' . $r['amount'] . '" data-dup="' . (int) $p['dup'] . '" data-hint="' . ($hint !== '' ? 1 : 0) . '" data-q="' . e($q) . '">'
-            . '<label class="imp-chk"><input type="checkbox" data-imp-inc aria-label="Import ' . e($r['payee']) . '"' . ($p['dup'] ? ' disabled' : ' checked') . '><i></i></label>'
+        $tr = ($r['xt'] ?? '') === 'transfer';
+        echo '<li class="imp-row' . ($p['dup'] ? ' is-dup' : '') . ($p['blocked'] ? ' is-blocked' : '') . '" data-n="' . (int) $r['n'] . '" data-ti="' . $p['ti'] . '" data-dir="' . ($tr ? 'tr' : $r['dir']) . '" data-cg="' . e($r['cgroup'] ?? $r['dir']) . '" data-ai="' . $p['ai'] . '" data-amt="' . ($tr ? 0 : $r['amount']) . '" data-blocked="' . (int) $p['blocked'] . '" data-dup="' . (int) $p['dup'] . '" data-hint="' . ($hint !== '' ? 1 : 0) . '" data-q="' . e($q) . '">'
+            . '<label class="imp-chk"><input type="checkbox" data-imp-inc aria-label="Import ' . e($r['payee']) . '"' . ($p['dup'] || $p['blocked'] ? ' disabled' : ' checked') . '><i></i></label>'
             . '<div class="imp-when"><b>' . e(date_label($r['date'])) . '</b><span>' . e($r['time'] ? substr($r['time'], 0, 5) : '') . '</span></div>'
             . '<div class="imp-who"><span class="imp-payee">' . e($r['payee'] !== '' ? $r['payee'] : '(no name)') . '</span><span class="imp-sub">' . e($r['other']) . '</span>'
-            . ($p['dup'] ? '<span class="imp-tag imp-tag--dup">Already imported</span>' : '') . ($hint !== '' ? '<span class="imp-tag imp-tag--hint" title="' . e($hint) . '">Maybe own transfer</span>' : '')
+            . ($p['dup'] ? '<span class="imp-tag imp-tag--dup">Already imported</span>' : '') . import_json_row_chips($r) . ($hint !== '' ? '<span class="imp-tag imp-tag--hint" title="' . e($hint) . '">Maybe own transfer</span>' : '')
             . '<div class="imp-remarkrow"><button type="button" class="imp-link" data-imp-remark' . ($p['remarks'] !== '' ? ' hidden' : '') . '>' . icon('message-square', 'size-3') . ' Add remark</button><input class="input imp-rem" type="text" maxlength="500" value="' . e($p['remarks']) . '" data-orig="' . e($p['remarks']) . '" placeholder="Remark" aria-label="Remark for ' . e($r['payee']) . '"' . ($p['remarks'] !== '' ? '' : ' hidden') . '></div></div>'
-            . '<div class="imp-acc">' . e($r['account']) . '</div>'
-            . '<div class="imp-cat"><button type="button" class="imp-catbtn" data-imp-catbtn aria-label="Change category">' . '<span data-imp-catlabel>' . e(import_cat_label($s, $p['cat'], $r['tag'])) . '</span>' . icon('chevron-down', 'size-3') . '</button></div>'
-            . '<div class="imp-amt ' . $r['dir'] . '">' . ($r['dir'] === 'in' ? '+' : '−') . e(fmt($r['amount'])) . '</div></li>';
+            . '<div class="imp-acc">' . e($r['account']) . ($tr ? ' → ' . e($r['to_account']) : '') . '</div>'
+            . '<div class="imp-cat">' . ($tr ? '<span class="imp-tr">Transfer</span>' : '<button type="button" class="imp-catbtn" data-imp-catbtn aria-label="Change category">' . '<span data-imp-catlabel>' . e(import_cat_label($s, $p['cat'], $r['tag'])) . '</span>' . icon('chevron-down', 'size-3') . '</button>') . '</div>'
+            . '<div class="imp-amt ' . ($tr ? 'tr' : $r['dir']) . '">' . ($tr ? '⇄' : ($r['dir'] === 'in' ? '+' : '−')) . e(fmt($r['amount'])) . '</div></li>';
     }
     echo '</ul></section>';
     echo '<div class="imp-bar" role="region" aria-label="Confirm import"><div class="imp-bar__t"><b data-imp-n>' . $ready . '</b> to import<span data-imp-extra></span></div><button type="submit" class="btn btn-primary" data-imp-go>' . icon('check', 'size-4') . ' <span data-imp-golabel>Import ' . $ready . ' transactions</span></button></div></form>';

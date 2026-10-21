@@ -16,7 +16,7 @@ const IMPORT_ADAPTERS_MAX_ROWS = 5000;
 
 function import_register_adapter(string $key, array $a): void { $GLOBALS['__import_adapters'][$key] = $a + ['key' => $key]; }
 function import_adapters(): array {
-    if (!isset($GLOBALS['__import_adapters'])) { $GLOBALS['__import_adapters'] = []; import_register_adapter('paytm', paytm_adapter()); }
+    if (!isset($GLOBALS['__import_adapters'])) { $GLOBALS['__import_adapters'] = []; import_register_adapter('paytm', paytm_adapter()); if (function_exists('import_json_adapter')) { import_register_adapter('json', import_json_adapter()); } }
     return $GLOBALS['__import_adapters'];
 }
 function import_adapter(?string $key): ?array { return $key ? (import_adapters()[$key] ?? null) : null; }

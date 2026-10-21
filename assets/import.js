@@ -7,63 +7,76 @@
   function $$(s, r) { return Array.prototype.slice.call((r || d).querySelectorAll(s)); }
   var money = function (minor) { var loc = d.body.getAttribute('data-locale') || 'en-IN', sym = d.body.getAttribute('data-symbol') || '₹'; try { return sym + new Intl.NumberFormat(loc, { maximumFractionDigits: 2, minimumFractionDigits: minor % 100 ? 2 : 0 }).format(minor / 100); } catch (e) { return sym + (minor / 100).toFixed(2); } };
 
-  // ---------- upload form: size check, then the upload with automatic fallbacks when a hosting firewall refuses it ----------
-  // 1) normal multipart POST  2) the same bytes as base64 text parts  3) the browser reads the .xlsx itself and sends only the rows (server re-validates)  4) a clear explanation
+  // ---------- upload forms (statement file, JSON text/file): size check, then the upload with automatic fallbacks when a hosting firewall refuses it ----------
+  // 1) normal POST  2) the same bytes as base64 text parts  3) (xlsx only) the browser reads the workbook itself and sends only the rows, which the server re-validates  4) a clear explanation
   function el(tag, cls, text) { var n = d.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
   function stepList(box) {
     box.hidden = false; box.textContent = ''; var ul = el('ul', 'imp-steps'); box.appendChild(ul);
     return function add(text, state) { var li = el('li', state ? 'is-' + state : '', text); ul.appendChild(li); return function (t, st) { if (t) li.textContent = t; li.className = st ? 'is-' + st : ''; }; };
   }
-  function blockedHelp(err, tried, jsonUrl) {
-    err.hidden = false; err.textContent = '';
+  function blockedHelp(err, tried, jsonUrl, isJson) {
+    err.hidden = false; err.textContent = ''; err.className = 'imp-err imp-err--host';
     err.appendChild(el('b', '', 'Your web host’s firewall blocked this upload.'));
-    err.appendChild(el('span', '', ' The page you saw (“403 Forbidden – Access to this resource on the server is denied”) comes from the hosting security system, not from this app and not from your file. Nothing was saved. We tried: ' + tried.join('; ') + '.'));
-    var p = el('span', 'imp-err__next'); p.appendChild(d.createTextNode(' What you can do: '));
-    var a = el('a', '', 'use the “Use your own AI” JSON import'); a.href = jsonUrl || '#json'; p.appendChild(a);
-    p.appendChild(d.createTextNode(' (it pastes plain text, which the firewall lets through), or ask your host to allow POST /do/import-upload and give them the rule id from their Imunify360 / ModSecurity log (see README, “Troubleshooting uploads”).')); err.appendChild(p);
+    err.appendChild(el('span', '', ' The page you saw (“403 Forbidden – Access to this resource on the server is denied”) comes from your hosting provider’s security system, not from this app and not from your file. Nothing was saved. We tried: ' + tried.join('; ') + '.'));
+    var p = el('span', 'imp-err__next');
+    if (isJson) { p.appendChild(d.createTextNode(' Try pasting a smaller part (ask your AI for the first 100 transactions), or ask your host to allow POST /do/import-json and /import/b64 and give them the rule id from their Imunify360 / ModSecurity log (README, “Troubleshooting uploads”).')); }
+    else { p.appendChild(d.createTextNode(' What you can do: ')); var a = el('a', '', 'use “Use your own AI (JSON)”'); a.href = jsonUrl || '#json'; p.appendChild(a); p.appendChild(d.createTextNode(' (it pastes plain text, which the firewall normally lets through), or ask your host to allow POST /do/import-upload and give them the rule id from their Imunify360 / ModSecurity log (README, “Troubleshooting uploads”).')); }
+    err.appendChild(p);
   }
-  function uploadForm() {
-    var f = $('input[type=file][data-max]'); if (!f || f._imp) return; f._imp = 1;
-    var err = $('[data-imp-err]'), form = f.form, prog = $('[data-imp-prog]'), csrf = $('input[name=_csrf]', form), btn = $('[data-imp-upload]', form);
-    function show(m) { if (err) { err.textContent = m || ''; err.hidden = !m; } }
-    f.addEventListener('change', function () { var file = f.files && f.files[0]; show(''); if (prog) prog.hidden = true; if (file && file.size > 8 * 1048576) { show('That file is ' + (file.size / 1048576).toFixed(1) + ' MB; the limit is 8 MB.'); f.value = ''; } });
+  function attachUpload(form) {
+    if (form._imp) return; form._imp = 1;
+    var isJson = form.hasAttribute('data-imp-json'), f = $('input[type=file]', form), ta = $('textarea[name=json_text]', form), err = $('[data-imp-err]', form), prog = $('[data-imp-prog]', form), csrf = $('input[name=_csrf]', form), btn = $('[data-imp-upload]', form);
+    var limit = f ? +f.getAttribute('data-max') || 8 * 1048576 : 0;
+    function show(m) { if (err) { err.className = 'imp-err'; err.textContent = m || ''; err.hidden = !m; } }
     function busy(on) { if (btn) { if (on) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy'); } }
+    if (f) f.addEventListener('change', function () { var file = f.files && f.files[0]; show(''); if (prog) prog.hidden = true; if (file && file.size > Math.max(limit, isJson ? 0 : 8 * 1048576)) { show('That file is ' + (file.size / 1048576).toFixed(1) + ' MB; the limit is ' + (Math.max(limit, isJson ? 0 : 8 * 1048576) / 1048576).toFixed(0) + ' MB.'); f.value = ''; } });
     form.addEventListener('submit', function (e) {
       if (btn && btn.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
-      var file = f.files && f.files[0];
-      if (!file || !w.fetch || !w.MfncUpfb || !prog) { busy(true); return; }   // no JavaScript help: the plain form post still works
-      e.preventDefault(); busy(true); show(''); var add = stepList(prog), tried = [], tok = csrf ? csrf.value : '';
-      var done = function (url) { w.location.href = url; };
-      var failMsg = function (m) { show(m); busy(false); };
-      var jsonUrl = (d.querySelector('[data-imp-jsonlink]') || {}).href || '#json';
-      var s1 = add('Uploading ' + file.name + '…', 'run');
-      var fd = new FormData(form);
-      fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'X-Mfnc-Spa': '1', 'X-Requested-With': 'fetch' }, body: fd }).then(function (r) {
-        if (r.status === 204 && r.headers.get('X-Mfnc-Redirect')) { s1('Uploaded.', 'ok'); done(r.headers.get('X-Mfnc-Redirect')); return; }
+      var file = f && f.files && f.files[0], text = ta ? ta.value : '', hasText = isJson && text.trim() !== '';
+      if ((!file && !hasText) || !w.fetch || !w.MfncUpfb || !prog) { busy(true); return; }   // nothing to send, or no JavaScript help: the plain form post (and its server-side message) is used
+      e.preventDefault(); busy(true); show(''); var add = stepList(prog), tried = [], tok = csrf ? csrf.value : '', label = hasText ? 'your text' : file.name;
+      var done = function (url) { w.location.href = url; }, failMsg = function (m) { show(m); busy(false); };
+      var jsonUrl = (d.querySelector('[data-imp-jsonlink]') || {}).href || '#json', endpoint = form.getAttribute('data-b64');
+      var s1 = add('Sending ' + label + '…', 'run');
+      fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'X-Mfnc-Spa': '1', 'X-Requested-With': 'fetch' }, body: new FormData(form) }).then(function (r) {
+        if (r.status === 204 && r.headers.get('X-Mfnc-Redirect')) { s1('Sent.', 'ok'); done(r.headers.get('X-Mfnc-Redirect')); return; }
         if (w.MfncUpfb.blocked(r.status, r.headers)) { s1('The host refused the normal upload (HTTP ' + r.status + ').', 'bad'); tried.push('the normal upload (HTTP ' + r.status + ')'); return fallback(); }
-        // our own answer that is not a redirect (for example a page-expired notice): let the normal form handle and show it
-        s1('', 'ok'); busy(false); form.submit();
+        s1('', 'ok'); busy(false); form.submit();   // our own answer that is not a redirect (for example a page-expired notice): let the normal form show it
       }, function () { s1('The connection was cut during the normal upload.', 'bad'); tried.push('the normal upload (connection reset)'); return fallback(); });
+      function payload() { return hasText ? Promise.resolve(new TextEncoder().encode(text)) : w.MfncUpfb.bytesOf(file); }
       function fallback() {
-        var s2 = add('Sending the file as plain text instead…', 'run');
-        return w.MfncUpfb.bytesOf(file).then(function (bytes) {
-          return w.MfncUpfb.sendBytes(bytes, { endpoint: form.getAttribute('data-b64'), csrf: tok, kind: 'statement', name: file.name, onProgress: function (p) { s2('Sending the file as plain text… ' + Math.round(p * 100) + '%', 'run'); }, onStep: function (t) { s2(t, 'run'); } });
+        var s2 = add('Sending it as plain text instead…', 'run');
+        return payload().then(function (bytes) {
+          return w.MfncUpfb.sendBytes(bytes, { endpoint: endpoint, csrf: tok, kind: isJson ? 'json' : 'statement', name: hasText ? 'pasted JSON' : file.name, onProgress: function (p) { s2('Sending it as plain text… ' + Math.round(p * 100) + '%', 'run'); }, onStep: function (t) { s2(t, 'run'); } });
         }).then(function (j) { s2('Sent as text.', 'ok'); done(j.redirect); }, function (er) {
-          if (er && er.server) { s2('Sent as text, but the file was refused.', 'bad'); failMsg(er.message); return; }
-          s2('The text upload was blocked too.', 'bad'); tried.push('the file as plain text'); return clientParse();
+          if (er && er.server) { s2('Sent as text, but it was refused.', 'bad'); failMsg(er.message); return; }
+          s2('The text upload was blocked too.', 'bad'); tried.push('the same content as plain text'); return isJson ? blocked() : clientParse();
         });
       }
       function clientParse() {
-        if (!/\.xlsx$/i.test(file.name)) { return blocked(); }
+        if (!file || !/\.xlsx$/i.test(file.name)) { return blocked(); }
         var s3 = add('Reading the workbook in your browser and sending only the rows…', 'run');
-        return w.MfncUpfb.parseXlsx(file).then(function (parsed) {
-          return w.MfncUpfb.sendRows(parsed, { endpoint: form.getAttribute('data-b64'), csrf: tok, name: file.name, onStep: function (t) { s3(t, 'run'); } });
-        }).then(function (j) { s3('Read in your browser. Please check the preview carefully.', 'ok'); done(j.redirect); }, function (er) {
-          if (er && er.server) { s3('The rows were sent, but not accepted.', 'bad'); failMsg(er.message); return; }
-          s3((er && er.blocked) ? 'That was blocked as well.' : 'Could not read the workbook in the browser (' + ((er && er.message) || 'unknown') + ').', 'bad'); tried.push('reading it in your browser'); return blocked();
-        });
+        return w.MfncUpfb.parseXlsx(file).then(function (parsed) { return w.MfncUpfb.sendRows(parsed, { endpoint: endpoint, csrf: tok, name: file.name, onStep: function (t) { s3(t, 'run'); } }); })
+          .then(function (j) { s3('Read in your browser. Please check the preview carefully.', 'ok'); done(j.redirect); }, function (er) {
+            if (er && er.server) { s3('The rows were sent, but not accepted.', 'bad'); failMsg(er.message); return; }
+            s3((er && er.blocked) ? 'That was blocked as well.' : 'Could not read the workbook in the browser (' + ((er && er.message) || 'unknown') + ').', 'bad'); tried.push('reading it in your browser'); return blocked();
+          });
       }
-      function blocked() { busy(false); blockedHelp(err, tried, jsonUrl); }
+      function blocked() { busy(false); blockedHelp(err, tried, jsonUrl, isJson); }
+    });
+  }
+  function uploadForms() { $$('form[data-b64]').forEach(attachUpload); }
+  // copy buttons on the JSON panel and the report on the preview
+  function copyText(text, note) {
+    function fallback() { var t = d.createElement('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0'; d.body.appendChild(t); t.select(); try { d.execCommand('copy'); } catch (x) { } t.remove(); }
+    if (w.navigator.clipboard && w.navigator.clipboard.writeText) w.navigator.clipboard.writeText(text).catch(fallback); else fallback();
+    if (note) { note.hidden = false; clearTimeout(note._t); note._t = setTimeout(function () { note.hidden = true; }, 6000); }
+  }
+  function copyButtons() {
+    if (d._impCopy) return; d._impCopy = 1;
+    d.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-imp-copy]'); if (b) { var ta = d.getElementById(b.getAttribute('data-imp-copy')); if (ta) copyText(ta.value, $('[data-imp-copied]', b.closest('li') || d)); return; }
+      var r = e.target.closest && e.target.closest('[data-imp-copyreport]'); if (r) { var t = $('[data-imp-report]', r.closest('section') || d); if (t) copyText(t.value, $('[data-imp-copied]', r.closest('section') || d)); }
     });
   }
 
@@ -121,7 +134,7 @@
       var t = e.target;
       var cb = t.closest && t.closest('[data-imp-catbtn]');
       if (cb) {
-        var row = cb.closest('.imp-row'), src = $('#imp-tpl-' + row.getAttribute('data-dir')), sel = d.createElement('select'), n = row.getAttribute('data-n');
+        var row = cb.closest('.imp-row'), src = $('#imp-tpl-' + (row.getAttribute('data-cg') || row.getAttribute('data-dir'))), sel = d.createElement('select'), n = row.getAttribute('data-n');
         sel.className = 'input imp-catpick'; sel.setAttribute('aria-label', 'Category'); sel.innerHTML = src.innerHTML;
         sel.value = (n in rowCat) ? rowCat[n] : '__map'; cb.parentNode.replaceChild(sel, cb); sel.focus(); return;
       }
@@ -165,7 +178,7 @@
     });
   }
 
-  function boot() { uploadForm(); preview(); remarkDialog(); }
+  function boot() { uploadForms(); copyButtons(); preview(); remarkDialog(); }
   if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot); else boot();
   d.addEventListener('mfnc:page', boot);
 })();

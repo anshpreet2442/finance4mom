@@ -65,6 +65,11 @@ function import_account_groups(array $stmt): array {
         if ($i === false) { $g[] = ['name' => $k, 'rows' => 0, 'min' => $r['date'], 'max' => $r['date'], 'out' => 0, 'in' => 0, 'out_n' => 0, 'in_n' => 0]; $i = count($g) - 1; }
         $g[$i]['rows']++; $g[$i]['min'] = min($g[$i]['min'], $r['date']); $g[$i]['max'] = max($g[$i]['max'], $r['date']);
         $g[$i][$r['dir']] += $r['amount']; $g[$i][$r['dir'] . '_n']++;
+        if (!empty($r['to_account'])) {   // a transfer (JSON import) also touches the destination account
+            $k2 = $r['to_account']; $j = array_search($k2, array_column($g, 'name'), true);
+            if ($j === false) { $g[] = ['name' => $k2, 'rows' => 0, 'min' => $r['date'], 'max' => $r['date'], 'out' => 0, 'in' => 0, 'out_n' => 0, 'in_n' => 0]; $j = count($g) - 1; }
+            $g[$j]['rows']++; $g[$j]['min'] = min($g[$j]['min'], $r['date']); $g[$j]['max'] = max($g[$j]['max'], $r['date']); $g[$j]['in'] += $r['amount']; $g[$j]['in_n']++;
+        }
     }
     return $g;
 }
@@ -72,13 +77,13 @@ function import_account_groups(array $stmt): array {
 function import_tag_groups(array $stmt): array {
     $g = [];
     foreach ($stmt['rows'] as $r) {
-        $k = $r['dir'] . '|' . $r['tag'];
-        if (!isset($g[$k])) { $g[$k] = ['dir' => $r['dir'], 'tag' => $r['tag'], 'tag_raw' => $r['tag_raw'], 'rows' => 0, 'total' => 0]; }
+        $cg = $r['cgroup'] ?? $r['dir']; $k = $cg . '|' . $r['tag'];
+        if (!isset($g[$k])) { $g[$k] = ['dir' => $cg, 'tag' => $r['tag'], 'tag_raw' => $r['tag_raw'], 'rows' => 0, 'total' => 0]; }
         $g[$k]['rows']++; $g[$k]['total'] += $r['amount'];
     }
     return array_values($g);
 }
-function import_row_group(array $groups, array $r): int { foreach ($groups as $i => $g) { if ($g['dir'] === $r['dir'] && $g['tag'] === $r['tag']) { return $i; } } return -1; }
+function import_row_group(array $groups, array $r): int { foreach ($groups as $i => $g) { if ($g['dir'] === ($r['cgroup'] ?? $r['dir']) && $g['tag'] === $r['tag']) { return $i; } } return -1; }
 
 const IMPORT_TAG_SYNONYMS = [
     'groceries' => ['groceries', 'grocery', 'supermarket'], 'food' => ['food & dining', 'food', 'dining'], 'shopping' => ['shopping'], 'medical' => ['medical', 'health'], 'health' => ['medical'], 'pharmacy' => ['medical'],
@@ -118,7 +123,7 @@ function import_default_choices(array $s, array $stmt): array {
 }
 /** Statement Summary vs the rows we read: [['label','expected','actual','kind'=>'money'|'count','ok'], ...] or null when the file has no Summary. */
 function import_reconcile(array $stmt): ?array {
-    $sum = $stmt['summary'] ?? null; if (!$sum) { return null; }
+    $sum = $stmt['summary'] ?? null; if (!$sum || ($stmt['source'] ?? '') === 'json') { return null; }   // the JSON import reports its declared totals among its own checks
     $paid = $recv = ['amount' => 0, 'count' => 0]; $acc = [];
     foreach ($stmt['rows'] as $r) {
         $k = $r['dir'] === 'out' ? 'paid' : 'recv'; $a = &$acc[$r['account']]; $a ??= ['paid_amount' => 0, 'paid_count' => 0, 'recv_amount' => 0, 'recv_count' => 0];
@@ -154,12 +159,16 @@ function import_plan(int $uid, array $stmt, array $ch): array {
     $existing = import_existing_keys($uid, (string) $stmt['source'], array_column($stmt['rows'], 'key'));
     $exclude = array_flip(array_map('intval', $ch['exclude'] ?? [])); $seen = []; $plan = [];
     foreach ($stmt['rows'] as $r) {
-        $ai = $accIdx[$r['account']]; $target = $ch['acc'][$ai] ?? 'new'; $ti = import_row_group($tg, $r);
-        $cat = array_key_exists($r['n'], $ch['rowcat'] ?? []) ? $ch['rowcat'][$r['n']] : ($ch['cat'][$ti] ?? '');
+        $fx = (string) ($ch['fix'][$r['n']] ?? ''); $orig = $r;
+        if ($fx === 'flip' && in_array($r['xt'] ?? '', ['income', 'expense'], true)) { $r['xt'] = $r['xt'] === 'income' ? 'expense' : 'income'; $r['dir'] = $r['dir'] === 'in' ? 'out' : 'in'; $r['cgroup'] = $r['dir']; }   // JSON import fix: the AI got the direction wrong
+        if ($fx === 'swapdm' && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $r['date'], $dm) && valid_date($dm[1] . '-' . $dm[3] . '-' . $dm[2])) { $r['date'] = $dm[1] . '-' . $dm[3] . '-' . $dm[2]; }
+        $ai = $accIdx[$r['account']]; $target = $ch['acc'][$ai] ?? 'new'; $ti = import_row_group($tg, $orig); $toAi = !empty($r['to_account']) ? ($accIdx[$r['to_account']] ?? null) : null;
+        $cat = array_key_exists($r['n'], $ch['rowcat'] ?? []) ? $ch['rowcat'][$r['n']] : (($fx === 'flip' || $fx === 'clearcat') ? '' : ($ch['cat'][$ti] ?? ''));
         $key = $r['key']; $tk = $target === 'new' ? 'n' . $ai : (string) (int) $target;
         if (isset($seen[mb_strtolower($key) . '|' . $tk])) { $key .= '@' . $ai; } $seen[mb_strtolower($r['key']) . '|' . $tk] = true; $seen[mb_strtolower($key) . '|' . $tk] = true;
         $dup = $target !== 'new' && isset($existing[mb_strtolower($key) . '|' . (int) $target]);
-        $plan[] = ['row' => $r, 'ai' => $ai, 'ti' => $ti, 'target' => $target, 'cat' => $cat, 'key' => mb_substr($key, 0, 80), 'dup' => $dup, 'include' => !isset($exclude[$r['n']]),
+        $blocked = !empty($r['blocked']) && $fx !== 'keep';
+        $plan[] = ['row' => $r, 'ai' => $ai, 'to_ai' => $toAi, 'ti' => $ti, 'target' => $target, 'cat' => $cat, 'key' => mb_substr($key, 0, 80), 'dup' => $dup, 'blocked' => $blocked, 'fx' => $fx, 'include' => !isset($exclude[$r['n']]) && $fx !== 'skip' && !$blocked,
             'remarks' => array_key_exists($r['n'], $ch['rowrem'] ?? []) ? (string) $ch['rowrem'][$r['n']] : (string) $r['comment']];
     }
     return $plan;
@@ -186,6 +195,7 @@ function import_choices_from_post(int $uid, array $stmt, array $s, array $post):
         elseif (is_string($v) && ctype_digit($v)) { if (!in_array((int) $v, array_map('intval', $ownedCats), true)) { throw new UserError('Choose one of your categories for “' . $g['tag'] . '”.'); } $ch['cat'][$i] = (int) $v; }
     }
     $mode = $post['mode'] ?? 'keep'; $ch['mode'] = $mode === 'reflect' ? 'reflect' : 'keep';
+    foreach (['bills' => 'xb', 'goals' => 'xg', 'budgets' => 'xu'] as $k => $f) { $ch['extras'][$k] = array_values(array_unique(array_map('intval', array_filter((array) ($post[$f] ?? []), 'is_scalar')))); }   // which bills / goals / budgets of a JSON file stay ticked
     $re = $post['rowedits'] ?? '';
     if (is_string($re) && $re !== '') {
         if (strlen($re) > IMPORT_MAX_ROWEDITS) { throw new UserError('Too many row edits at once.'); }
@@ -197,6 +207,7 @@ function import_choices_from_post(int $uid, array $stmt, array $s, array $post):
             if ($v === 'none' || $v === '') { $ch['rowcat'][$n] = ''; } elseif (is_int($v) || (is_string($v) && ctype_digit($v))) { if (!in_array((int) $v, array_map('intval', $ownedCats), true)) { throw new UserError('A row uses a category that is not yours.'); } $ch['rowcat'][$n] = (int) $v; }
         }
         foreach ((array) ($e['rm'] ?? []) as $n => $v) { $n = (int) $n; if (isset($valid[$n]) && is_string($v)) { $ch['rowrem'][$n] = imp_clean_text($v, 500); } }
+        foreach ((array) ($e['fx'] ?? []) as $n => $v) { $n = (int) $n; if (isset($valid[$n]) && is_string($v) && in_array($v, ['skip', 'keep', 'flip', 'swapdm', 'clearcat'], true)) { $ch['fix'][$n] = $v; } }
     }
     return $ch;
 }
@@ -217,7 +228,8 @@ function import_commit(int $uid, string $token, array $ch): array {
         $pv = import_load_preview($uid, $token, true);
         if (!$pv) { throw new UserError('This import preview was not found or has expired. Upload the file again.'); }
         if ($pv['import_id']) { $im = one('SELECT * FROM {imports} WHERE id=? AND user_id=?', [$pv['import_id'], $uid]); return ['import_id' => (int) $pv['import_id'], 'imported' => (int) ($im['rows_imported'] ?? 0), 'duplicates' => (int) ($im['rows_skipped'] ?? 0), 'excluded' => 0, 'accounts_created' => 0, 'categories_created' => 0, 'already' => true]; }
-        $stmt = $pv['stmt']; if (!$stmt || empty($stmt['source']) || empty($stmt['rows'])) { throw new UserError('Nothing importable was found in this file.'); }
+        $stmt = $pv['stmt']; $exs = $stmt['json']['extras'] ?? []; $hasExtras = !empty($exs['bills']) || !empty($exs['goals']) || !empty($exs['budgets']);
+        if (!$stmt || empty($stmt['source']) || (empty($stmt['rows']) && !$hasExtras)) { throw new UserError('Nothing importable was found in this file.'); }
         $source = (string) $stmt['source']; $today = today();
         $accounts = []; foreach (all('SELECT id,name,opening_date,opening_balance,archived FROM {accounts} WHERE user_id=?', [$uid]) as $a) { $accounts[(int) $a['id']] = $a; }
         foreach ($ch['acc'] as $v) { if ($v !== 'new' && (!isset($accounts[(int) $v]) || $accounts[(int) $v]['archived'])) { throw new UserError('One of the chosen accounts is no longer available.'); } }
@@ -226,7 +238,7 @@ function import_commit(int $uid, string $token, array $ch): array {
 
         $plan = import_plan($uid, $stmt, $ch); $todo = []; $dups = 0; $excl = 0;
         foreach ($plan as $p) { if (!$p['include']) { $excl++; } elseif ($p['dup']) { $dups++; } else { $todo[] = $p; } }
-        if (!$todo) { run('DELETE FROM {import_previews} WHERE token=? AND user_id=?', [$token, $uid]); return ['import_id' => 0, 'imported' => 0, 'duplicates' => $dups, 'excluded' => $excl, 'accounts_created' => 0, 'categories_created' => 0, 'already' => false]; }
+        if (!$todo && !$hasExtras) { run('DELETE FROM {import_previews} WHERE token=? AND user_id=?', [$token, $uid]); return ['import_id' => 0, 'imported' => 0, 'duplicates' => $dups, 'excluded' => $excl, 'accounts_created' => 0, 'categories_created' => 0, 'already' => false]; }
         usort($todo, fn($a, $b) => [$a['row']['date'], $a['row']['time'] ?? '', $a['row']['n']] <=> [$b['row']['date'], $b['row']['time'] ?? '', $b['row']['n']]);
 
         $ag = import_account_groups($stmt); $tg = import_tag_groups($stmt);
@@ -245,7 +257,10 @@ function import_commit(int $uid, string $token, array $ch): array {
         };
         // accounts: create the ones that are needed, with their opening date/balance
         $minDate = []; $net = [];
-        foreach ($todo as $p) { $ai = $p['ai']; $minDate[$ai] = isset($minDate[$ai]) ? min($minDate[$ai], $p['row']['date']) : $p['row']['date']; }
+        foreach ($todo as $p) {
+            if (($p['row']['xt'] ?? '') === 'transfer' && $p['to_ai'] !== null && ($ch['acc'][$p['ai']] ?? 'new') !== 'new' && ($ch['acc'][$p['ai']] ?? 'new') === ($ch['acc'][$p['to_ai']] ?? 'x')) { throw new UserError('Row ' . $p['row']['n'] . ' moves money from an account to itself, because both were mapped to the same account of yours. Choose different accounts.'); }
+            foreach (array_filter([$p['ai'], $p['to_ai']], fn($x) => $x !== null) as $ai) { $minDate[$ai] = isset($minDate[$ai]) ? min($minDate[$ai], $p['row']['date']) : $p['row']['date']; }
+        }
         $accId = []; $accCreated = 0; $usedNames = array_map(fn($a) => mb_strtolower($a['name']), $accounts);
         foreach ($minDate as $ai => $md) {
             $t = $ch['acc'][$ai] ?? 'new';
@@ -253,20 +268,23 @@ function import_commit(int $uid, string $token, array $ch): array {
             $name = $ch['accname'][$ai] ?? ($ag[$ai]['name'] ?: 'Imported account'); $base = $name; $k = 2;
             while (in_array(mb_strtolower($name), $usedNames, true)) { $name = mb_substr($base, 0, 54) . ' (' . $k++ . ')'; }
             $usedNames[] = mb_strtolower($name);
-            $type = preg_match('/wallet/i', $name) ? 'wallet' : 'bank'; $od = min($md, $today);
-            $accId[$ai] = insert('INSERT INTO {accounts} (user_id,name,type,opening_balance,opening_date,purpose) VALUES (?,?,?,?,?,?)', [$uid, $name, $type, 0, $od, 'spending']);
-            $accounts[$accId[$ai]] = ['id' => $accId[$ai], 'name' => $name, 'opening_date' => $od, 'opening_balance' => 0, 'archived' => 0, 'new' => true]; $accCreated++;
+            $type = $stmt['json']['acc_types'][$ag[$ai]['name']] ?? (preg_match('/wallet/i', $name) ? 'wallet' : 'bank'); $od = min($md, $today); $op = $stmt['json']['opening'][$ag[$ai]['name']] ?? null;   // a JSON file can say what the account held before its first row
+            $accId[$ai] = insert('INSERT INTO {accounts} (user_id,name,type,opening_balance,opening_date,purpose) VALUES (?,?,?,?,?,?)', [$uid, $name, $type, $op ?? 0, $od, 'spending']);
+            $accounts[$accId[$ai]] = ['id' => $accId[$ai], 'name' => $name, 'opening_date' => $od, 'opening_balance' => $op ?? 0, 'archived' => 0, 'new' => true, 'opening_set' => $op !== null]; $accCreated++;
         }
         // rows
-        $cols = '(user_id,type,status,amount,date,account_id,category_id,description,payment_method,remarks,source,source_ref,import_id,txn_time,source_meta)';
+        $cols = '(user_id,type,status,amount,date,account_id,to_account_id,category_id,description,payment_method,remarks,notes,source,source_ref,import_id,txn_time,source_meta)';
         $count = 0; $first = true;
         foreach (array_chunk($todo, 150) as $chunk) {
             $ph = []; $args = [];
             foreach ($chunk as $p) {
-                $r = $p['row']; $aid = $accId[$p['ai']]; $cid = $catFor($p['cat'], $p['ti']);
-                $ph[] = '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
-                array_push($args, $uid, $r['dir'] === 'in' ? 'income' : 'expense', 'completed', $r['amount'], $r['date'], $aid, $cid, mb_substr($r['payee'] !== '' ? $r['payee'] : $r['details'], 0, 200), 'UPI', tx_remarks($p['remarks']), $source, $p['key'], $imp, $r['time'], import_meta_json($r) ?: null);
-                $od = $accounts[$aid]['opening_date']; if ($r['date'] >= $od) { $net[$aid] = ($net[$aid] ?? 0) + import_cash_effect($r['dir'], $r['amount']); }
+                $r = $p['row']; $aid = $accId[$p['ai']]; $xt = $r['xt'] ?? ($r['dir'] === 'in' ? 'income' : 'expense'); $toAid = $xt === 'transfer' && $p['to_ai'] !== null ? ($accId[$p['to_ai']] ?? null) : null; $cid = $xt === 'transfer' ? null : $catFor($p['cat'], $p['ti']);
+                $ph[] = '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+                array_push($args, $uid, $xt, $r['status'] ?? 'completed', $r['amount'], $r['date'], $aid, $toAid, $cid, mb_substr($r['payee'] !== '' ? $r['payee'] : $r['details'], 0, 200), $source === 'json' ? (($r['method'] ?? '') !== '' ? $r['method'] : null) : 'UPI', tx_remarks($p['remarks']), ($r['notes'] ?? '') !== '' ? mb_substr((string) $r['notes'], 0, 500) : null, $source, $p['key'], $imp, $r['time'], import_meta_json($r) ?: null);
+                if (($r['status'] ?? 'completed') === 'completed') {   // planned items never touch cash
+                    $od = $accounts[$aid]['opening_date']; if ($r['date'] >= $od) { $net[$aid] = ($net[$aid] ?? 0) + import_cash_effect($xt === 'transfer' ? 'out' : $r['dir'], $r['amount']); }
+                    if ($toAid) { $odt = $accounts[$toAid]['opening_date']; if ($r['date'] >= $odt) { $net[$toAid] = ($net[$toAid] ?? 0) + $r['amount']; } }
+                }
                 $count++;
             }
             run('INSERT INTO {transactions} ' . $cols . ' VALUES ' . implode(',', $ph), $args);
@@ -280,6 +298,7 @@ function import_commit(int $uid, string $token, array $ch): array {
             foreach ($accId as $ai => $aid) {
                 if (isset($done[$aid])) { continue; } $done[$aid] = true;   // two statement accounts can be mapped to one of yours: correct it once
                 $e = $net[$aid] ?? 0; $a = $accounts[$aid]; $first = min(array_map(fn($k) => $minDate[$k], array_keys($accId, $aid)));
+                if (!empty($a['opening_set'])) { continue; }   // the file said what it held before the first row: today's balance follows from that
                 if (!empty($a['new'])) { $target = $ch['bal'][$ai] ?? ''; $target = $target === '' ? 0 : (int) $target; run('UPDATE {accounts} SET opening_balance=? WHERE id=? AND user_id=?', [$target - $e, $aid, $uid]); }
                 elseif ($e !== 0) {
                     $d = max($a['opening_date'], day_before($first)); if ($d < $a['opening_date']) { $d = $a['opening_date']; }
@@ -288,10 +307,11 @@ function import_commit(int $uid, string $token, array $ch): array {
                 }
             }
         }
+        $extrasDone = $hasExtras && function_exists('import_json_commit_extras') ? import_json_commit_extras($uid, $stmt, $ch, $accounts, $cats, $today) : [];
         $dates = array_column(array_column($todo, 'row'), 'date'); sort($dates);
         $newAccs = []; foreach ($accId as $aid) { if (!empty($accounts[$aid]['new'])) { $newAccs[$aid] = $keep ? ($net[$aid] ?? 0) : 0; } }   // account id => the shift put into its opening balance (so undo can take it back)
-        $summary = ['period' => $stmt['period']['text'] ?? null, 'from' => $dates[0], 'to' => end($dates), 'mode' => $keep ? 'keep' : 'reflect', 'accounts_created' => $accCreated, 'categories_created' => $catsCreated, 'adjustments' => $adjusted, 'excluded' => $excl,
-            'new_accounts' => $newAccs, 'new_categories' => array_values($newCat)];
+        $summary = ['period' => $stmt['period']['text'] ?? null, 'from' => $dates[0] ?? null, 'to' => $dates ? end($dates) : null, 'mode' => $keep ? 'keep' : 'reflect', 'accounts_created' => $accCreated, 'categories_created' => $catsCreated, 'adjustments' => $adjusted, 'excluded' => $excl,
+            'new_accounts' => $newAccs, 'new_categories' => array_values($newCat)] + $extrasDone;
         run('UPDATE {imports} SET rows_imported=?, rows_skipped=?, summary=? WHERE id=?', [$count, $dups, json_encode($summary, JSON_UNESCAPED_UNICODE), $imp]);
         run('UPDATE {import_previews} SET import_id=?, data=NULL WHERE token=? AND user_id=?', [$imp, $token, $uid]);
         audit('import.commit', 'import#' . $imp, import_source_label($source) . ': ' . $count . ' added, ' . $dups . ' duplicates skipped');
@@ -316,6 +336,7 @@ function import_remove(int $uid, int $importId): int {
             $used = (int) val('SELECT (SELECT COUNT(*) FROM {transactions} WHERE category_id=?) + (SELECT COUNT(*) FROM {budgets} WHERE category_id=?) + (SELECT COUNT(*) FROM {bills} WHERE category_id=?) + (SELECT COUNT(*) FROM {recurring_templates} WHERE category_id=?) + (SELECT COUNT(*) FROM {categories} WHERE parent_id=?)', [$cid, $cid, $cid, $cid, $cid]);
             if ($used === 0) { run('DELETE FROM {categories} WHERE id=? AND user_id=?', [$cid, $uid]); }
         }
+        if (function_exists('import_json_remove_extras')) { import_json_remove_extras($uid, $sum); }
         run("UPDATE {imports} SET status='removed', removed_at=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $importId]);
         audit('import.remove', 'import#' . $importId, $n . ' transactions removed');
         return $n;
