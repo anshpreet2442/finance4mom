@@ -54,7 +54,7 @@ function lw_normalize($l, string $device): array {
     $theme = ['density' => in_array($th['density'] ?? '', ['comfortable', 'compact'], true) ? $th['density'] : $dt['density'], 'font_scale' => round(max(0.9, min(1.5, (float) ($th['font_scale'] ?? 1.0))), 2), 'contrast' => ($th['contrast'] ?? '') === 'high' ? 'high' : 'normal', 'simple' => !empty($th['simple']), 'big_buttons' => !empty($th['big_buttons'])];
     $out = []; $seen = [];
     foreach (is_array($l['widgets'] ?? null) ? $l['widgets'] : [] as $w) {
-        if (!is_array($w)) { continue; } $id = (string) ($w['id'] ?? ''); if (!isset($cat[$id]) || isset($seen[$id]) || !in_array($device, $cat[$id][5], true)) { continue; } $seen[$id] = 1; $c = $cat[$id];
+        if (!is_array($w)) { continue; } $id = is_string($w['id'] ?? null) ? $w['id'] : ''; if (!isset($cat[$id]) || isset($seen[$id]) || !in_array($device, $cat[$id][5], true)) { continue; } $seen[$id] = 1; $c = $cat[$id];
         $item = ['id' => $id, 'size' => in_array($w['size'] ?? '', $c[2], true) ? $w['size'] : $c[2][0], 'variant' => in_array($w['variant'] ?? '', $c[3], true) ? $w['variant'] : $c[3][0], 'visible' => !empty($w['visible']), 'zone' => in_array($w['zone'] ?? '', LW_ZONES, true) ? $w['zone'] : $c[4]];
         if ($c[7]) { $item['group'] = $c[7]; } if (!empty($w['md_full']) && $item['size'] === 'third') { $item['md_full'] = true; } $out[] = $item;
     }
@@ -214,7 +214,7 @@ function lw_render_layout(array $layout, array $ctx, string $device): string {
 }
 /** Theme classes and the root font-size rule for a layout. */
 function lw_theme_attrs(array $t): array {
-    $cls = 'lw lw-' . $t['density'] . ($t['contrast'] === 'high' ? ' lw-hc' : '') . ($t['big_buttons'] ? ' lw-big' : '') . ($t['simple'] ? ' lw-simple' : ''); return [$cls, abs($t['font_scale'] - 1.0) > 0.001 ? 'html{font-size:' . round($t['font_scale'] * 100) . '%}' : ''];
+    $cls = 'lw lw-' . $t['density'] . ($t['contrast'] === 'high' ? ' lw-hc' : '') . ($t['font_scale'] >= 1.3 ? ' lw-xl' : '') . ($t['big_buttons'] ? ' lw-big' : '') . ($t['simple'] ? ' lw-simple' : ''); return [$cls, abs($t['font_scale'] - 1.0) > 0.001 ? 'html{font-size:' . round($t['font_scale'] * 100) . '%}' : ''];
 }
 /** The phone quick-add sheet that sits right under the hero while both layouts are the defaults (a customised mobile layout carries it as widgets). */
 function lw_page_sheet(array $u, array $ctx): string {

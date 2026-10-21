@@ -187,7 +187,7 @@ function tg_parse_entry(string $t, ?string $today = null): ?array {
     elseif (preg_match('/^(' . TG_INCOME_WORDS . ')\b\s*/iu', $t, $m)) { $type = 'income'; $verb = true; $t = mb_substr($t, mb_strlen($m[0])); }
     elseif (preg_match('/^(' . TG_EXPENSE_WORDS . ')\b\s*/iu', $t, $m)) { $verb = true; $t = mb_substr($t, mb_strlen($m[0])); }
     $date = null; if (preg_match('/\s+(yesterday|today)\s*$/iu', $t, $dm)) { $date = strtolower($dm[1]) === 'yesterday' ? day_before($today) : $today; $t = trim(mb_substr($t, 0, -mb_strlen($dm[0]))); }
-    if (!preg_match('/^(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?\s*(?:rs\.?|rupees|inr|₹)?\s*(?:(?:on|for|at|to|from|towards|in)\s+)?(.*)$/iu', $t, $m)) { return null; }
+    if (!preg_match('/^(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?)(?![\d,]|\.\d|[eE]\d)\s*(k\b)?\s*(?:rs\.?|rupees|inr|₹)?\s*(?:(?:on|for|at|to|from|towards|in)\s+)?(.*)$/iu', $t, $m)) { return null; }
     $numTxt = $m[1]; $rest = trim($m[3]); if (!$verb && $rest === '') { return null; } // a bare number is not an entry
     if ($m[2] !== '') { $numTxt = rtrim(rtrim(number_format((float) str_replace(',', '', $numTxt) * 1000, 2, '.', ''), '0'), '.'); }
     $amount = parse_money($numTxt); if ($amount === null || $amount <= 0 || $amount > 100_000_000_00) { return null; }

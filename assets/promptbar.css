@@ -148,5 +148,7 @@
   .prompt-bar--app .prompt-bar__tool { width: 40px; height: 44px; }
   .prompt-bar--app .prompt-bar__pick { flex: 0 1 auto; padding: 0 8px; }
   .prompt-bar--app .prompt-bar__pick:first-of-type { max-width: 46%; }
+  .prompt-bar--app .prompt-bar__pick[aria-label='Choose effort'] { flex: none; }
+  @media (max-width: 480px) { .prompt-bar--app .prompt-bar__pick[aria-label='Choose effort'] svg { display: none; } .prompt-bar--app .prompt-bar__pick { padding: 0 6px; } }
   .prompt-bar--app .prompt-bar__send { width: 44px; margin-left: 2px; }
 }

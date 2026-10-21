@@ -13,7 +13,7 @@
 @media (prefers-reduced-motion:reduce){.ai-voice-btn.is-on{animation:none}}
 .voice-auto{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--mute,#5d6b64);margin:0 0 .5rem;min-height:44px}
 .voice-auto input{width:18px;height:18px;accent-color:var(--lime-dk,#0b6b4d)}
-.voice-hint{opacity:.8}
+.voice-hint{opacity:1}
 [data-voice-read].is-on{border-color:currentColor}
 /* AI layout: the dashboard grid */
 .lw-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:1.25rem}
@@ -61,3 +61,8 @@
 .lw-log,.lw-msg{overflow-wrap:anywhere;min-width:0}.lw-composer{flex-wrap:wrap}.lw-composer textarea{min-width:0;flex:1 1 200px}.lw-sugg .chip{max-width:100%}.lw-wl__c{min-width:0}
 
 .lw-row input[type=range]{min-height:44px}
+html:not(.dark) .bg-lime\/20.text-lime-dk,html:not(.dark) .bg-orange\/20.text-orange-dk{color:color-mix(in srgb,currentColor 78%,#000)}
+html:not(.dark) .text-lime-dk,html:not(.dark) .text-orange-dk{color:color-mix(in srgb,currentColor 80%,#000)}
+/* big text / easy mode: money never breaks across lines, and the two-column tiles become one column on phones */
+.lw .stat-tile__value,.lw .stat-grid .num{white-space:nowrap}
+@media (max-width:639.98px){.lw-big .stat-grid,.lw-simple .stat-grid,.lw-xl .stat-grid{grid-template-columns:minmax(0,1fr)}}

@@ -36,8 +36,8 @@ function share_state(array $r): string {
 function share_clean_widgets($w): array { $w = is_array($w) ? $w : (is_string($w) ? explode(',', $w) : []); return array_values(array_intersect(array_keys(SHARE_WIDGETS), array_map('strval', $w))); }
 /** Validates the owner's input. Throws UserError with a friendly text. Returns the column values. */
 function share_validate(array $in): array {
-    $title = trim(preg_replace('/\s+/u', ' ', (string) ($in['title'] ?? '')) ?? ''); if ($title === '' || mb_strlen($title) > 80) { throw new UserError('Give the link a title of up to 80 characters.'); }
-    $msg = trim((string) ($in['message'] ?? '')); if (mb_strlen($msg) > 400) { throw new UserError('The message can be up to 400 characters.'); }
+    $title = trim(preg_replace('/[\x00-\x1F\x7F]+|\s+/u', ' ', (string) ($in['title'] ?? '')) ?? ''); if ($title === '' || mb_strlen($title) > 80) { throw new UserError('Give the link a title of up to 80 characters.'); }
+    $msg = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', '', (string) ($in['message'] ?? '')) ?? ''); if (mb_strlen($msg) > 400) { throw new UserError('The message can be up to 400 characters.'); }
     $widgets = share_clean_widgets($in['widgets'] ?? []); if (!$widgets) { throw new UserError('Choose at least one widget to show.'); }
     $exp = null; $e = (string) ($in['expires'] ?? 'never');
     if (in_array($e, ['1d', '7d', '30d', '90d'], true)) { $exp = gmdate('Y-m-d H:i:s', time() + (int) $e * 86400); }
