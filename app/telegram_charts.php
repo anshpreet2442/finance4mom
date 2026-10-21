@@ -65,7 +65,7 @@ function tg_chart_png(array $spec): string {
         usort($items, fn($a, $b) => $b[1] <=> $a[1]); if (count($items) > 8) { $rest = array_sum(array_column(array_slice($items, 7), 1)); $items = array_slice($items, 0, 7); $items[] = ['Other', $rest]; }
         $total = array_sum(array_column($items, 1)); if ($total <= 0) { tg_text($im, 16 * $S * 0.75, (int) ($W / 2), (int) ($H / 2), $mute, 'Nothing to show yet', false, 'c'); return tg_png($im, $S); }
         $areaH = $H - $top - $pad; $d = min($areaH, (int) ($W * 0.5)); $cx = $pad + (int) ($d / 2); $cy = $top + (int) ($areaH / 2); $start = -90.0;
-        foreach ($items as $i => [$l, $v]) { $sweep = $v / $total * 360; imagefilledarc($im, $cx, $cy, $d, $d, (int) round($start), (int) round($start + $sweep), $colors[$i % count($colors)], IMG_ARC_PIE); $start += $sweep; }
+        foreach ($items as $i => [$l, $v]) { $sweep = $v / $total * 360; $a0 = (int) round($start); $a1 = (int) round($start + $sweep); if ($i === count($items) - 1) { $a1 = 270; } if ($a1 > $a0) { imagefilledarc($im, $cx, $cy, $d, $d, $a0, $a1, $colors[$i % count($colors)], IMG_ARC_PIE); } $start += $sweep; } // GD draws a full disc when start == end, so slivers are skipped
         imagefilledellipse($im, $cx, $cy, (int) ($d * 0.56), (int) ($d * 0.56), $white);
         tg_text($im, 12 * $S * 0.75, $cx, $cy - 6 * $S, $mute, 'Total', false, 'c'); tg_text($im, 19 * $S * 0.75, $cx, $cy + 22 * $S, $ink, tg_short_num($total, $money), true, 'c');
         $lx = $pad + $d + 36 * $S; $rowH = min(44 * $S, (int) ($areaH / max(1, count($items)))); $ly = $cy - (int) (count($items) * $rowH / 2) + $rowH / 2;

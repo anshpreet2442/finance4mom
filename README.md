@@ -105,5 +105,20 @@ All credentials are entered in the admin area, stored encrypted on the server (k
 | Twilio SMS with payment links, template + live preview, log, test send | Admin → SMS | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
 | AI advisor (Anthropic Messages API, server-side): model, system prompt, token prices, budgets, rate limits | Admin → AI agent | `ANTHROPIC_API_KEY`; `MFNC_AI_MOCK=1` runs everything against a fake model without a key |
 | Free / paid plan / pay-as-you-go per feature, wallets, usage dashboards | Admin → Plans & usage | |
+| Telegram bot and Telegram AI plugin: token, webhook, persona, reminders, log | Admin → Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_API_BASE` (tests) |
+
+### Telegram bot (setup)
+
+Two features are registered in the plan system (`telegram` free by default, `telegram_ai` paid by default, so the plugin shop and Plans page list them).
+
+1. In Telegram open **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`. Copy the token it gives you.
+2. Your site needs a **public https address**: set `APP_URL` in `config.php` (or `MFNC_APP_URL`), e.g. `https://finance.example.com`. Telegram refuses plain http.
+3. Admin → Telegram: paste the token and the bot username, switch it on, **Save**, then press **Register webhook**. That calls `setWebhook` with `{APP_URL}/webhooks/telegram`, a generated `secret_token` (stored encrypted, checked on every request in constant time) and `allowed_updates`, and publishes the command list. **Check now** shows the webhook address, waiting updates and Telegram's last delivery error.
+4. People connect in Settings → Connections → **Connect Telegram**: a single-use, 15-minute, unguessable link opens `t.me/<bot>?start=<token>`; pressing Start links the chat to the account (one chat per account, one account per chat; `/stop` or the Disconnect button unlinks).
+5. Commands: `/balance`, `/bills` (Mark paid with a confirm step), `/add` or just "spent 450 on groceries" (confirm, Undo), `/goals`, `/report`, `/menu`, `/notify on|off`, `/forget`, `/help`. Money changes use the same service functions as the web forms and are audit-logged.
+6. **Telegram AI plugin**: free text goes to the person's own advisor (their name and setup profile), in an editable CA-friend persona (Admin → Telegram, with reset), with inline buttons the model may request from a whitelist, stat cards, monospace tables, PNG charts (PHP GD), receipt photos, and Apply / Undo for every change. Usage counts against the same AI budget or wallet. Chat memory is the last N turns plus a rolling summary; `/forget` wipes it; message text is never written to the log.
+7. Reminders in Telegram are opt-in per person; run `php tools/telegram_cron.php` daily from cron (or press "Send due reminders now").
+
+Local testing without Telegram: `php -S 127.0.0.1:8097 tests/telegram_mock.php`, then start the app with `TELEGRAM_API_BASE=http://127.0.0.1:8097 MFNC_AI_MOCK=1` and post crafted updates to `/webhooks/telegram` with the `X-Telegram-Bot-Api-Secret-Token` header. `tests/run.php` starts the mock itself. Charts need the GD extension; DejaVu fonts ship in `assets/fonts`.
 
 Landing page: `/welcome` (and `/` when signed out). Run the tests with `MFNC_DB_USER=... MFNC_DB_PASS=... php tests/run.php`. After changing Tailwind classes rebuild CSS with `cd tools && npm i && npx tailwindcss -i input.css -o ../assets/app.css --minify`.
