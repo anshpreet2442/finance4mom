@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
@@ -305,6 +305,18 @@ function mfnc_schema(): array {
     'telegram_sent' => "CREATE TABLE IF NOT EXISTS {telegram_sent} (
         user_id INT UNSIGNED NOT NULL, dedupe_key VARCHAR(80) NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, dedupe_key), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
     ) $t",
+    // ---- v11 (builder-D): statement imports (Paytm and friends): history of batches + short-lived previews ----
+    'imports' => "CREATE TABLE IF NOT EXISTS {imports} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, source VARCHAR(20) NOT NULL, filename VARCHAR(190) NOT NULL DEFAULT '',
+        rows_total INT UNSIGNED NOT NULL DEFAULT 0, rows_imported INT UNSIGNED NOT NULL DEFAULT 0, rows_skipped INT UNSIGNED NOT NULL DEFAULT 0,
+        status ENUM('done','removed') NOT NULL DEFAULT 'done', summary TEXT NULL, removed_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_imp_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'import_previews' => "CREATE TABLE IF NOT EXISTS {import_previews} (
+        token CHAR(32) PRIMARY KEY, user_id INT UNSIGNED NOT NULL, filename VARCHAR(190) NOT NULL DEFAULT '', data MEDIUMTEXT NULL, import_id INT UNSIGNED NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at DATETIME NOT NULL, INDEX idx_ip_user (user_id), INDEX idx_ip_exp (expires_at),
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
     ];
 }
 
@@ -326,6 +338,9 @@ function mfnc_install(): void {
 function column_exists(string $table, string $col): bool {
     return (int) val('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', [$table . TABLE_SUFFIX, $col]) > 0;
 }
+function index_exists(string $table, string $index): bool {
+    return (int) val('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?', [$table . TABLE_SUFFIX, $index]) > 0;
+}
 /** Columns added after v1 (CREATE TABLE IF NOT EXISTS never alters an existing table). Idempotent. */
 function mfnc_migrate(): void {
     $adds = [
@@ -337,6 +352,8 @@ function mfnc_migrate(): void {
         ['purchases', 'account_id', 'INT UNSIGNED NULL'],
         ['preferences', 'phone', 'VARCHAR(20) NULL'], ['preferences', 'email_alerts', 'TINYINT(1) NOT NULL DEFAULT 1'], ['preferences', 'sms_alerts', 'TINYINT(1) NOT NULL DEFAULT 0'],
         ['users', 'ai_budget_micro', 'BIGINT NULL'],
+        ['transactions', 'source', 'VARCHAR(20) NULL'], ['transactions', 'source_ref', 'VARCHAR(80) NULL'], ['transactions', 'import_id', 'INT UNSIGNED NULL'], ['transactions', 'remarks', 'VARCHAR(500) NULL'], ['transactions', 'txn_time', 'TIME NULL'], ['transactions', 'source_meta', 'VARCHAR(1000) NULL'],
+        ['preferences', 'show_import_labels', 'TINYINT(1) NOT NULL DEFAULT 1'],
         ['charges', 'feature', 'VARCHAR(30) NULL'], ['charges', 'buy_key', 'VARCHAR(40) NULL'], ['charges', 'feature_days', 'SMALLINT UNSIGNED NULL'], ['charges', 'topup_micro', 'BIGINT NULL'],
     ];
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }
@@ -345,6 +362,12 @@ function mfnc_migrate(): void {
     if (column_exists('entitlements', 'until')) { db()->exec(sqlt('ALTER TABLE {entitlements} CHANGE `until` valid_until DATE NOT NULL')); } // early v6 builds used a reserved-looking name
     db()->exec(sqlt("ALTER TABLE {ai_actions} MODIFY status ENUM('proposed','applied','undone','failed','dismissed') NOT NULL DEFAULT 'proposed'")); // v7: previews and dismissals
     db()->exec(sqlt("ALTER TABLE {wallet_ledger} MODIFY kind ENUM('topup','usage','adjust','purchase') NOT NULL")); // v9: shop purchases
+    // v11: imported transactions are de-duplicated by (user, source, reference, account); rows without a source (all manual ones) are NULL and never collide
+    if (!index_exists('transactions', 'uq_tx_src')) { db()->exec(sqlt('ALTER TABLE {transactions} ADD UNIQUE KEY uq_tx_src (user_id, source, source_ref, account_id)')); }
+    if (!index_exists('transactions', 'idx_tx_import')) { db()->exec(sqlt('ALTER TABLE {transactions} ADD INDEX idx_tx_import (import_id)')); }
+    if ((int) val("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'fk_tx_import'", ['transactions' . TABLE_SUFFIX]) === 0) {
+        db()->exec(sqlt('ALTER TABLE {transactions} ADD CONSTRAINT fk_tx_import FOREIGN KEY (import_id) REFERENCES {imports}(id) ON DELETE SET NULL'));
+    }
     mfnc_fix_collations();
 }
 

@@ -70,11 +70,18 @@ function tx_params(int $uid, array $i): array {
     return [$i['type'], $i['status'], $i['amount'], $i['date'], $i['account_id'], $t ? $i['to_account_id'] : null, $t ? null : ($i['category_id'] ?? null),
         mb_substr($i['description'] ?? '', 0, 200), $i['payment_method'] ?? null, $i['notes'] ?? null, $i['refund_of'] ?? null];
 }
+/** Remarks: free text under a transaction (max 500 characters, one line); empty becomes NULL. */
+function tx_remarks($v): ?string { $v = trim((string) preg_replace('/\s+/u', ' ', (string) ($v ?? ''))); return $v === '' ? null : mb_substr($v, 0, 500); }
+function set_transaction_remarks(int $uid, int $id, ?string $remarks): void {
+    owned('transactions', $id, $uid);
+    if ($remarks !== null && mb_strlen(trim($remarks)) > 500) { throw new UserError('Remarks are too long (max 500 characters).'); }
+    run('UPDATE {transactions} SET remarks=? WHERE id=? AND user_id=?', [tx_remarks($remarks), $id, $uid]);
+}
 function create_transaction(int $uid, array $i): int {
     $i += ['status' => 'completed', 'to_account_id' => null, 'category_id' => null, 'description' => '', 'payment_method' => null, 'notes' => null, 'refund_of' => null, 'fund_goal_id' => null];
     validate_tx($uid, $i);
     return tx(function () use ($uid, $i) {
-        $id = insert('INSERT INTO {transactions} (type,status,amount,date,account_id,to_account_id,category_id,description,payment_method,notes,refund_of,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', array_merge(tx_params($uid, $i), [$uid]));
+        $id = insert('INSERT INTO {transactions} (type,status,amount,date,account_id,to_account_id,category_id,description,payment_method,notes,refund_of,user_id,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', array_merge(tx_params($uid, $i), [$uid, tx_remarks($i['remarks'] ?? null)]));
         sync_fund($uid, $id, $i);
         return $id;
     });
@@ -82,10 +89,12 @@ function create_transaction(int $uid, array $i): int {
 function update_transaction(int $uid, int $id, array $i): void {
     $ex = owned('transactions', $id, $uid);
     if ($ex['occurrence_id']) { throw new UserError("Bill payments can't be edited. Delete it and record the payment again."); }
+    $setRemarks = array_key_exists('remarks', $i);   // callers that do not know about remarks (sync, Telegram, AI) leave the saved one alone
     $i += ['status' => 'completed', 'to_account_id' => null, 'category_id' => null, 'description' => '', 'payment_method' => null, 'notes' => null, 'refund_of' => null, 'fund_goal_id' => null, 'id' => $id];
     validate_tx($uid, $i);
-    tx(function () use ($uid, $id, $i) {
+    tx(function () use ($uid, $id, $i, $setRemarks) {
         run('UPDATE {transactions} SET type=?,status=?,amount=?,date=?,account_id=?,to_account_id=?,category_id=?,description=?,payment_method=?,notes=?,refund_of=? WHERE id=? AND user_id=?', array_merge(tx_params($uid, $i), [$id, $uid]));
+        if ($setRemarks) { run('UPDATE {transactions} SET remarks=? WHERE id=? AND user_id=?', [tx_remarks($i['remarks']), $id, $uid]); }
         sync_fund($uid, $id, $i);
     });
 }
@@ -408,7 +417,7 @@ function load_demo_data(int $uid, ?string $today = null): void {
 }
 function wipe_financial_data(int $uid): void {
     tx(function () use ($uid) {
-        foreach (['notifications', 'plan_lines', 'monthly_plans', 'contributions', 'transactions', 'recurring_templates', 'bill_occurrences', 'bills', 'purchases', 'goals', 'budgets'] as $t) { run("DELETE FROM {{$t}} WHERE user_id=?", [$uid]); }
+        foreach (['notifications', 'plan_lines', 'monthly_plans', 'contributions', 'transactions', 'import_previews', 'imports', 'recurring_templates', 'bill_occurrences', 'bills', 'purchases', 'goals', 'budgets'] as $t) { run("DELETE FROM {{$t}} WHERE user_id=?", [$uid]); }
         run('UPDATE {accounts} SET opening_balance=0, opening_date=?, archived=0 WHERE user_id=?', [today(), $uid]);
     });
 }

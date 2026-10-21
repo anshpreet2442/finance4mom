@@ -2,15 +2,15 @@
 declare(strict_types=1);
 /** Read model: loads one user's data once and derives dashboard / report views from it. */
 
-function prefs(): array { return $GLOBALS['__prefs'] ?? ['currency' => 'INR', 'locale' => 'en-IN', 'theme' => 'system', 'reminder_days' => 7, 'big_purchase_threshold' => 10000000]; }
+function prefs(): array { return $GLOBALS['__prefs'] ?? ['currency' => 'INR', 'locale' => 'en-IN', 'theme' => 'system', 'reminder_days' => 7, 'big_purchase_threshold' => 10000000, 'show_import_labels' => 1]; }
 
 function load_snapshot(int $uid, ?string $today = null): array {
     $today ??= today();
     generate_from_templates($uid, $today);
     ensure_occurrences($uid, $today);
-    $prefs = one('SELECT currency,locale,theme,reminder_days,big_purchase_threshold FROM {preferences} WHERE user_id=?', [$uid]) ?? prefs();
+    $prefs = one('SELECT currency,locale,theme,reminder_days,big_purchase_threshold,show_import_labels FROM {preferences} WHERE user_id=?', [$uid]) ?? prefs();
     $GLOBALS['__prefs'] = $prefs;
-    $txs = all('SELECT id,type,status,amount,date,account_id,to_account_id,category_id,occurrence_id,description,payment_method,notes,refund_of,bill_id,template_id FROM {transactions} WHERE user_id=? ORDER BY date DESC, id DESC', [$uid]);
+    $txs = all('SELECT id,type,status,amount,date,account_id,to_account_id,category_id,occurrence_id,description,payment_method,notes,refund_of,bill_id,template_id,remarks,source,source_ref,import_id,txn_time,source_meta FROM {transactions} WHERE user_id=? ORDER BY date DESC, id DESC', [$uid]);
     $accounts = all('SELECT id,name,type,opening_balance,opening_date,archived,purpose,label FROM {accounts} WHERE user_id=? ORDER BY archived, id', [$uid]);
     foreach ($accounts as &$a) { $a['balance'] = account_balance($a, $txs); } unset($a);
     $budgets = []; foreach (all('SELECT category_id, amount FROM {budgets} WHERE user_id=?', [$uid]) as $b) { $budgets[(int) $b['category_id']] = (int) $b['amount']; }

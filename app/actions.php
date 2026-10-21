@@ -44,10 +44,16 @@ function do_transaction_save(array $u): string {
         'to_account_id' => $type === 'transfer' ? in_id('to_account_id', 'destination account') : null,
         'category_id' => in_opt_id('category_id'), 'description' => in_line('description', 200, false), 'payment_method' => in_opt('payment_method', 40),
         'notes' => in_opt('notes', 500), 'refund_of' => $type === 'refund' ? in_opt_id('refund_of') : null, 'fund_goal_id' => $type === 'expense' ? in_opt_id('fund_goal_id') : null];
+    if (array_key_exists('remarks', $_POST)) { $i['remarks'] = in_line('remarks', 500, false); }   // an older cached form without the field must not wipe a saved remark
     if ($id) { update_transaction((int) $u['id'], $id, $i); return 'Transaction updated.'; }
     create_transaction((int) $u['id'], $i);
     if ($type === 'expense' && $status === 'completed' && posted_email_choice() === true) { $a = one('SELECT name FROM {accounts} WHERE id=? AND user_id=?', [$i['account_id'], $u['id']]); notify_email((int) $u['id'], 'tx.payment', ['title' => $i['description'] ?: 'Expense', 'amount' => fmt_inr($amount), 'date' => date_label($i['date']), 'account' => $a ? ' from ' . $a['name'] : '', 'link' => abs_url('/transactions')], true); }
     return 'Transaction added.';
+}
+function do_transaction_remarks(array $u): string {
+    $id = in_id('id'); $r = in_line('remarks', 500, false); set_transaction_remarks((int) $u['id'], $id, $r === '' ? null : $r);
+    audit('transaction.remarks', 'transaction#' . $id, $r === '' ? 'cleared' : 'set');
+    return $r === '' ? 'Remark removed.' : 'Remark saved.';
 }
 function do_transaction_delete(array $u): string { delete_transaction((int) $u['id'], in_id('id')); return 'Transaction deleted.'; }
 function do_transaction_complete(array $u): string { complete_planned((int) $u['id'], in_id('id'), today()); return 'Marked as done.'; }
@@ -183,6 +189,7 @@ function do_plan_apply(array $u): string { apply_plan_line((int) $u['id'], in_id
 
 // ---------------- settings ----------------
 function do_prefs_save(array $u): string {
+    if (isset($_POST['_display'])) { run('UPDATE {preferences} SET show_import_labels=? WHERE user_id=?', [in_bool('show_import_labels') ? 1 : 0, $u['id']]); }   // only the Settings form sends _display, so other callers never switch it off by omission
     $cur = in_enum('currency', array_keys(CURRENCIES)); $loc = in_enum('locale', array_keys(LOCALES));
     run('UPDATE {preferences} SET currency=?,locale=?,theme=?,reminder_days=?,big_purchase_threshold=? WHERE user_id=?', [$cur, $loc, in_enum('theme', ['system', 'light', 'dark']), in_int('reminder_days', 0, 60, 7), in_money('big_purchase_threshold', false, false, true, 'Big-purchase threshold'), $u['id']]);
     return 'Preferences saved.';
