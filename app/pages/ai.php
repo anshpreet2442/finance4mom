@@ -29,7 +29,7 @@ function page_ai(): void {
         . ($profile['stage'] === 'interview' ? 'Getting to know you' : ($profile['stage'] === 'naming' ? 'Waiting for a name' : 'Ready. Ask anything about your money.')) . '</p></div></header>'
         . '<div class="ai-log" data-ai-log role="log" aria-live="polite" aria-relevant="additions"></div>'
         . '<div class="ai-suggest" data-ai-suggest></div>'
-        . '<form class="ai-compose" data-ai-form autocomplete="off"><label for="ai-input" class="sr-only">Message</label><textarea id="ai-input" rows="1" maxlength="2000" placeholder="Ask, or answer the question above…" data-ai-input></textarea><button class="btn btn-dark ai-send" aria-label="Send">' . icon('send', 'size-4') . '</button></form></section>';
+        . '<form class="ai-compose" data-ai-form autocomplete="off"><label for="ai-input" class="sr-only">Message</label><textarea id="ai-input" rows="1" maxlength="2000" placeholder="Ask or answer here" data-ai-input></textarea><button class="btn btn-dark ai-send" aria-label="Send">' . icon('send', 'size-4') . '</button></form></section>';
     echo '<script src="' . e(asset('ai.js')) . '" defer></script><script type="application/json" id="ai-data">' . json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) . '</script><noscript><p class="mt-4 text-sm text-mute">The advisor needs JavaScript.</p></noscript>';
     echo '<p class="mt-3 text-center text-xs text-mute">General information, not regulated advice. Confirm tax and legal matters with a practising chartered accountant.</p>';
     layout_end();
