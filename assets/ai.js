@@ -9,7 +9,7 @@
   function micro(v) { var n = Number(v) / 1e6; return n >= 100 ? money(Math.round(n)) : '₹' + n.toFixed(2); }
   function fmtCell(v, type) { if (typeof v === 'number') { if (type === 'money') return money(v); if (type === 'pct') return (Math.round(v * 10) / 10) + '%'; return String(Math.round(v * 100) / 100); } return String(v == null ? '' : v); }
   // small line icons (same set as the rest of the app: 24px grid, 1.8 stroke)
-  var ICON = { copy: ['M9 9h11v11H9z', 'M5 15V5a1 1 0 0 1 1-1h10'], speaker: ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9 9 0 0 1 0 13'], redo: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'], down: ['M12 5v14', 'm19 12-7 7-7-7'], check: ['M20 6 9 17l-5-5'], file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 13h8', 'M8 17h5'], image: ['M3 5h18v14H3z', 'm3 16 5-5 4 4 3-3 6 6', 'M9 9.5h.01'], clip: ['m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6A4 4 0 1 1 18 8.8l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5'], plus: ['M12 5v14', 'M5 12h14'], bill: ['M6 3h12v18l-3-2-3 2-3-2-3 2z', 'M9 8h6', 'M9 12h6'], chart: ['M3 3v18h18', 'm7 15 4-5 3 3 5-7'], target: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z', 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'], percent: ['m19 5-14 14', 'M7.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z', 'M16.5 18a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z'], upload: ['M12 3v12', 'm7 8 5-5 5 5', 'M5 21h14'] };
+  var ICON = { mic: ['M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z', 'M19 10v2a7 7 0 0 1-14 0v-2', 'M12 19v3'], copy: ['M9 9h11v11H9z', 'M5 15V5a1 1 0 0 1 1-1h10'], speaker: ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9 9 0 0 1 0 13'], redo: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'], down: ['M12 5v14', 'm19 12-7 7-7-7'], check: ['M20 6 9 17l-5-5'], file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 13h8', 'M8 17h5'], image: ['M3 5h18v14H3z', 'm3 16 5-5 4 4 3-3 6 6', 'M9 9.5h.01'], clip: ['m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6A4 4 0 1 1 18 8.8l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5'], plus: ['M12 5v14', 'M5 12h14'], bill: ['M6 3h12v18l-3-2-3 2-3-2-3 2z', 'M9 8h6', 'M9 12h6'], chart: ['M3 3v18h18', 'm7 15 4-5 3 3 5-7'], target: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z', 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'], percent: ['m19 5-14 14', 'M7.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z', 'M16.5 18a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z'], upload: ['M12 3v12', 'm7 8 5-5 5 5', 'M5 21h14'] };
   function svg(name, size) { var NS = 'http://www.w3.org/2000/svg', s = d.createElementNS(NS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', size || 16); s.setAttribute('height', size || 16); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '1.8'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true'); (ICON[name] || []).forEach(function (p) { var e = d.createElementNS(NS, 'path'); e.setAttribute('d', p); s.appendChild(e); }); return s; }
 
   // ---------- safe markdown: headings, lists, tables, code, quotes, bold / italic / code / links. Everything is built with DOM nodes and textContent. ----------
@@ -151,6 +151,8 @@
   };
 
 
+  w.MfAiBlocks = { R: R, md: md, money: money };   // the voice assistant (voicedock.js) renders the same cards in its panel
+
   function init(root) {
     if (!root || root._ai) return; root._ai = true;
     var data = JSON.parse(d.getElementById('ai-data').textContent), log = root.querySelector('[data-ai-log]'), mount = root.querySelector('[data-ai-composer]'), sug = root.querySelector('[data-ai-suggest]'), down = root.querySelector('[data-ai-down]'), subEl = root.querySelector('[data-ai-sub]'), bar = null, ctrl = null;
@@ -192,6 +194,7 @@
       else { col.appendChild(body); var m2 = el('div', 'ai-msg__meta'); m2.appendChild(el('time', '', fmtTime(at))); col.appendChild(m2); }
       row.appendChild(col); log.appendChild(row); return body;
     }
+    function voiceBadge(body) { var row = body.closest('.ai-msg'), meta = row && row.querySelector('.ai-msg__meta'); if (!meta) return; var bd = el('span', 'ai-voicebadge'); bd.appendChild(svg('mic', 12)); bd.appendChild(el('span', 'sr-only', 'Spoken with voice')); bd.title = 'Spoken with voice'; meta.insertBefore(bd, meta.firstChild); }
     function renderBlock(body, b) { var f = R[b.type]; if (!f) return; try { body.appendChild(f(b, ctx)); } catch (e) { /* a malformed block must never break the chat */ } }
     function plain(body) { var out = []; Array.prototype.forEach.call(body.children, function (c) { if (c.classList.contains('ai-status') || c.classList.contains('ai-steps-done')) return; var t = (c.innerText || c.textContent || '').trim(); if (t) out.push(t); }); return out.join('\n\n'); }
     function copyText(t, btn) {
@@ -208,8 +211,8 @@
     }
     function lastTools() { log.querySelectorAll('[data-ai-regen]').forEach(function (b) { b.remove(); }); }
     data.messages.forEach(function (m) {
-      if (m.role === 'user') { var u = bubble('user', m.at); u.appendChild(el('p', '', m.text)); if (m.files && m.files.length) { var at = el('div', 'ai-attached'); at.appendChild(svg('clip', 13)); at.appendChild(el('span', '', m.files.join(', '))); u.appendChild(at); } lastUser = m.text; }
-      else { var b = bubble('assistant', m.at); (m.blocks || []).forEach(function (x) { renderBlock(b, x); }); addTools(b, false); }
+      if (m.role === 'user') { var u = bubble('user', m.at); if (m.voice) voiceBadge(u); u.appendChild(el('p', '', m.text)); if (m.files && m.files.length) { var at = el('div', 'ai-attached'); at.appendChild(svg('clip', 13)); at.appendChild(el('span', '', m.files.join(', '))); u.appendChild(at); } lastUser = m.text; }
+      else { var b = bubble('assistant', m.at); if (m.voice) voiceBadge(b); (m.blocks || []).forEach(function (x) { renderBlock(b, x); }); addTools(b, false); }
     });
     var allA = log.querySelectorAll('.ai-msg--assistant .ai-msg__b'); if (allA.length && stage === 'ready') { var lb = allA[allA.length - 1]; var colL = lb.parentNode; var rg0 = tool('Try again', 'redo', { 'data-ai-regen': '' }); rg0.onclick = function () { if (!busy && lastUser) send(lastUser); }; var tl = colL.querySelector('.ai-msg__tools'); if (tl && lastUser) tl.appendChild(rg0); }
     // name prompts and interview chips only make sense on the latest message

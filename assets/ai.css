@@ -119,3 +119,6 @@ body section.ai-chat.ai2 { height: var(--ai-h, calc(100dvh - 11rem)); min-height
 @media (max-height: 600px) { body section.ai-chat.ai2 { min-height: 13rem; } }
 /* light mode: the green used for money in / the better regime was 4.2:1 at 13px */
 html:not(.dark) .ai2 .ai-prow .in, html:not(.dark) .ai2 .best, html:not(.dark) .ai2 td.best { color: #3a6600; }
+
+/* a small microphone on messages that were spoken (voice assistant) */
+.ai2 .ai-voicebadge { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); flex: none; align-self: center; }

@@ -8,9 +8,14 @@ function ai_fix_content(array $content): array {
     foreach ($content as &$b) { if (is_array($b) && ($b['type'] ?? '') === 'tool_use' && (!isset($b['input']) || $b['input'] === [])) { $b['input'] = new stdClass(); } }
     unset($b); return $content;
 }
-function ai_http(array $body): array {
+function ai_http(array $body, ?callable $onDelta = null): array {
     $c = ai_cfg();
-    if (ai_mock()) { return ai_mock_call($body); }
+    if (ai_mock()) {
+        $r = ai_mock_call($body);
+        if ($onDelta) { foreach ($r['content'] ?? [] as $b) { if (($b['type'] ?? '') === 'text') { foreach (ai_mock_deltas((string) $b['text']) as $piece) { $onDelta($piece); if (PHP_SAPI !== 'cli') { usleep(22000); } } } } }   // the mock streams like the real thing (voice turns speak from the first sentence)
+        return $r;
+    }
+    if ($onDelta) { return ai_http_stream($body, $onDelta); }   // server-sent events (voice_turn.php)
     $body = ai_fix_body($body);   // never send {} as [] or an empty text block (the API answers invalid_request_error)
     $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE); if ($json === false) { log_error(new RuntimeException('anthropic: request not encodable: ' . json_last_error_msg())); throw new UserError('That request could not be prepared. Please try again.'); }
     $ch = curl_init($c['base'] . '/v1/messages'); $local = (bool) preg_match('~^http://(127\.0\.0\.1|localhost)~', $c['base']);
@@ -83,6 +88,7 @@ function ai_mock_call(array $body): array {
         if ($rounds === 1) { $cat = $results[0]['expense_categories'][0] ?? null; return $out([$tu('propose_action', ['kind' => 'set_budget', 'params' => ['category_id' => $cat['id'] ?? 0, 'amount' => 7500], 'reason' => 'Your spending here is out of hand.'])], 'tool_use'); }
         return $text('Previewed. Apply it and stick to it.');
     }
+    if (str_contains(json_encode($body['system'] ?? ''), VOICE_HINT_MARK)) { return $text('Sure. Here is the mock advisor speaking. You said: ' . trim(mb_substr($plain, 0, 120)) . '. I can help with spending, bills, goals and budgets. Just ask.'); }   // a spoken turn: short sentences, no brackets
     return $text('Mock advisor here. Ask about EMI, tax, spending, goals, bills, or tell me to add an expense or set a budget. [model ' . $body['model'] . ', max_tokens ' . $body['max_tokens'] . (isset($body['output_config']['effort']) ? ', effort ' . $body['output_config']['effort'] : '') . (isset($body['thinking']) ? ', thinking ' . $body['thinking']['type'] : '') . ']');
 }
 
@@ -105,7 +111,7 @@ function ai_call(array $u, array $profile, array $messages, bool $tools = true, 
     $body = ['model' => $model, 'max_tokens' => $ep['max_tokens'] ?? $c['max_tokens'], 'system' => $sys, 'messages' => $messages];
     if (isset($ep['thinking'])) { $body['thinking'] = $ep['thinking']; } if (isset($ep['output_config'])) { $body['output_config'] = $ep['output_config']; }
     if ($tools) { $body['tools'] = ai_tools(); if (!empty($opts['web']) && site_setting('ai_web_search', '0') === '1') { $body['tools'][] = ['type' => 'web_search_20260209', 'name' => 'web_search', 'max_uses' => 3]; } }
-    $r = ai_http($body); $in = (int) ($r['usage']['input_tokens'] ?? 0) + (int) ($r['usage']['cache_creation_input_tokens'] ?? 0) + (int) ($r['usage']['cache_read_input_tokens'] ?? 0); $out = (int) ($r['usage']['output_tokens'] ?? 0);
+    $r = ai_http($body, isset($opts['on_delta']) && is_callable($opts['on_delta']) ? $opts['on_delta'] : null); $in = (int) ($r['usage']['input_tokens'] ?? 0) + (int) ($r['usage']['cache_creation_input_tokens'] ?? 0) + (int) ($r['usage']['cache_read_input_tokens'] ?? 0); $out = (int) ($r['usage']['output_tokens'] ?? 0);
     ai_record_usage($u, $model, $in, $out); return $r;
 }
 /** True when the browser went away (the Stop button aborts the request) or a test says so. Further model calls and tools are skipped. */
@@ -138,8 +144,9 @@ function ai_step_label(string $tool, array $in = []): string {
  */
 function ai_turn(array $u, string $text, callable $emit, array $opts = []): void {
     $uid = (int) $u['id']; $text = trim(mb_substr($text, 0, 2000)); if ($text === '' && empty($opts['files'])) { return; } if ($text === '') { $text = 'Please look at the attached file.'; }
-    $profile = ai_profile($uid);
+    $profile = ai_profile($uid); $voice = !empty($opts['voice']);
     if ($g = ai_gate($u, $profile['stage'] === 'ready')) { $emit(['type' => 'error', 'code' => $g['code'], 'message' => $g['message']]); return; } // the setup questions are cheap and are not rate limited
+    if ($voice && $profile['stage'] !== 'ready') { $emit(['type' => 'error', 'code' => 'setup', 'message' => 'Finish the advisor setup in the chat first. Then you can talk to it.']); return; }   // the setup interview is typed
     if ($profile['stage'] === 'interview') { ai_interview_step($u, $profile, $text, $emit); return; }
     if ($profile['stage'] === 'naming') { ai_name_step($u, $profile, $text, $emit); return; }
     try { $model = ai_pick_model($u, (string) ($opts['model'] ?? '')); } catch (UserError $e) { $emit(['type' => 'error', 'code' => 'model', 'message' => $e->getMessage()]); return; }
@@ -148,16 +155,18 @@ function ai_turn(array $u, string $text, callable $emit, array $opts = []): void
     if ($files && function_exists('ai_docs_turn') && ai_docs_turn($u, $profile, $text, $files, $opts, $emit, $model)) { return; }   // photos / PDFs: estimate, read, propose (ai_docs.php)
     $hint = ''; if (preg_match('/^\/([a-z][a-z0-9_-]{1,15})(\s|$)/', $text, $cm) && ($cmd = ai_commands($u)[$cm[1]] ?? null)) { $hint .= 'The person used the /' . $cmd['key'] . ' command. ' . $cmd['prompt'] . "\n"; }
     $scopes = array_values(array_intersect(array_map('strval', (array) ($opts['sources'] ?? [])), array_keys(AI_SCOPES))); if ($scopes) { $hint .= 'The person wants you to focus on their ' . implode(', ', $scopes) . ': read those with the tools first.' . "\n"; }
-    ai_save_message($uid, 'user', ['text' => $text] + ($files ? ['files' => array_column($files, 'name')] : []));
+    if ($voice) { $hint .= ai_voice_hint() . "\n"; }
+    ai_save_message($uid, 'user', ['text' => $text] + ($files ? ['files' => array_column($files, 'name')] : []) + ($voice ? ['voice' => 1, 'stt' => in_array($opts['stt'] ?? '', ['elevenlabs', 'browser', 'typed'], true) ? (string) $opts['stt'] : 'typed'] : []));   // the transcript only; audio is never stored
     $hist = ai_history($uid); $snap = null; $ui = []; $saved = []; $c = ai_cfg(); $messages = $hist ?: [['role' => 'user', 'content' => $text]];
     if ($files) { $last = count($messages) - 1; $blocks = ai_upload_blocks($files, $mcfg['vision']); if ($messages[$last]['role'] === 'user') { $messages[$last]['content'] = array_merge($blocks, [['type' => 'text', 'text' => (string) $messages[$last]['content']]]); } ai_upload_discard($files); }
-    $call = ['model' => $model, 'effort' => $effort, 'hint' => $hint, 'web' => !empty($opts['web'])];
-    $push = function (array $b) use (&$saved, $emit) { $saved[] = $b; $emit(['type' => 'block', 'block' => $b]); };
+    $call = ['model' => $model, 'effort' => $effort, 'hint' => $hint, 'web' => !empty($opts['web'])]; $curStep = 0;
+    if ($voice && !empty($opts['stream'])) { $call['on_delta'] = function (string $t) use ($emit, &$curStep) { $emit(['type' => 'delta', 'text' => $t, 'step' => $curStep]); }; }   // live text, so the browser can speak the first sentence at once
+    $push = function (array $b) use (&$saved, $emit, &$curStep) { $saved[] = $b; $emit(['type' => 'block', 'block' => $b, 'step' => $curStep]); };
     $open = []; $step = function (string $id, string $label, string $status, ?float $p = null) use ($emit, &$open) { if ($status === 'running') { $open[$id] = $label; } else { unset($open[$id]); } $emit(['type' => 'step', 'id' => $id, 'label' => $label, 'status' => $status] + ($p !== null ? ['progress' => $p] : [])); };
     $stopped = false;
     try {
         for ($n = 0; $n < $c['max_steps']; $n++) {
-            if (ai_should_stop()) { $stopped = true; break; }
+            if (ai_should_stop()) { $stopped = true; break; } $curStep = $n;
             $emit(['type' => 'status', 'text' => $n === 0 ? 'Thinking…' : 'Working on it…']); $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'running');
             try { $r = ai_call($u, $profile, $messages, true, $call); } catch (UserError $e) { $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'failed'); throw $e; }
             $step("t$n", $n === 0 ? 'Thinking it through' : 'Deciding the next step', 'done'); $content = ai_fix_content($r['content'] ?? []); $uses = [];
@@ -181,7 +190,7 @@ function ai_turn(array $u, string $text, callable $emit, array $opts = []): void
     } catch (UserError $e) { $emit(['type' => 'error', 'code' => 'service', 'message' => $e->getMessage()]); }
     foreach ($open as $id => $label) { $step($id, $label, 'cancelled'); }
     if ($stopped) { $emit(['type' => 'cancelled']); }
-    if ($saved) { ai_save_message($uid, 'assistant', ['blocks' => $saved]); }
+    if ($saved) { ai_save_message($uid, 'assistant', ['blocks' => $saved] + ($voice ? ['voice' => 1] : [])); }
     $emit(['type' => 'done']);
 }
 function ai_status_for(string $tool): string { return match (true) { str_starts_with($tool, 'calc_') => 'Calculating…', $tool === 'present' => 'Putting it together…', $tool === 'propose_action' => 'Preparing a preview…', default => 'Reading your data…' }; }

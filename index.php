@@ -55,6 +55,8 @@ if (method() === 'POST' && $path === '/sync') {
 
 // ---- AI advisor JSON endpoints (streamed NDJSON; CSRF in a header, like /sync) ----
 if (method() === 'POST' && $path === '/ai/chat') { handle_ai_chat(); }
+if (method() === 'POST' && $path === '/ai/voice') { handle_ai_voice(); }       // a spoken turn (voice_turn.php)
+if (method() === 'GET' && $path === '/ai/voice/state') { voice_http_state(); exit; }
 if (method() === 'POST' && $path === '/ai/act') { handle_ai_act(); }
 if (method() === 'POST' && $path === '/ai/upload') { handle_ai_upload(); }
 

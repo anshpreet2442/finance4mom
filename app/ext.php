@@ -105,6 +105,7 @@ function dock_pages(bool $admin = false): array {
         'analysis' => ['Analysis', '/analysis', 'chart-pie'], 'dues' => ['Dues', '/dues', 'wallet'], 'reports' => ['Reports', '/reports', 'chart-line'], 'ai' => ['AI advisor', '/ai', 'pills'], 'plugins' => ['Plugins', '/plugins', 'puzzle'], 'plans' => ['Plans', '/plans', 'credit-card'], 'settings' => ['Settings', '/settings', 'settings']];
     $ai = site_setting('ai_enabled', '0') === '1' || $admin; if (!$ai) { unset($p['ai']); }
     $paidAny = false; foreach (array_keys(features()) as $f) { if (feature_cfg($f)['mode'] !== 'free') { $paidAny = true; } } if (!$paidAny) { unset($p['plans']); }
+    if ($admin || (function_exists('voice_ai_visible') && site_setting('ai_enabled', '0') === '1')) { $p['voice'] = ['Voice', '/ai#voice', 'mic']; }   // opens the voice panel (assets/voicedock.js); a plain link to the chat without JavaScript
     if ($admin) { $p['admin'] = ['Admin', '/admin', 'shield-check']; }
     return $p;
 }
@@ -124,7 +125,7 @@ function dock_html(array $u): string {
     $badges = $GLOBALS['__badges'] ?? []; $active = dock_key_for((string) ($GLOBALS['__layout_extra']['active'] ?? ''));
     $o = '<nav id="mf-dock" class="mf-dock" aria-label="Dock" data-dock data-base="50" data-magnify="70" data-panel="68" data-gap="10" data-round="0.5" data-unpin-action="' . e(url('/do/dock-unpin')) . '"><div class="mf-dock__panel" role="toolbar" aria-label="Pinned pages">';
     foreach ($pins as $k) { [$label, $path, $ic] = $pages[$k]; $n = (int) ($badges[$k] ?? 0); $on = $k === $active;
-        $o .= '<a class="mf-dock__item' . ($on ? ' is-active' : '') . '" href="' . e(url($path)) . '" data-key="' . e($k) . '" data-label="' . e($label) . '" aria-label="' . e($label) . ($n ? ', ' . $n . ' need attention' : '') . '"' . ($on ? ' aria-current="page"' : '') . '>'
+        $o .= '<a class="mf-dock__item' . ($on ? ' is-active' : '') . '" href="' . e(url($path)) . '" data-key="' . e($k) . '" data-label="' . e($label) . '" aria-label="' . e($label) . ($k === 'voice' ? ' (Alt+V)' : '') . ($n ? ', ' . $n . ' need attention' : '') . '"' . ($k === 'voice' ? ' data-voice-open aria-haspopup="dialog" aria-expanded="false"' : '') . ($on ? ' aria-current="page"' : '') . '>'
             . '<span class="mf-dock__tile">' . icon($ic, 'mf-dock__icon') . ($n ? '<span class="mf-dock__badge" aria-hidden="true">' . min($n, 99) . '</span>' : '') . '</span><span class="mf-dock__label" aria-hidden="true">' . e($label) . '</span><span class="mf-dock__dot" aria-hidden="true"></span></a>'; }
     return $o . '</div><div class="mf-dock__menu" role="menu" hidden><a role="menuitem" data-act="open" href="#">Open</a><button type="button" role="menuitem" data-act="unpin">Unpin</button></div></nav>';
 }

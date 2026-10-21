@@ -21,7 +21,7 @@ function page_ai(): void {
     }
     ai_ensure_started($uid, $profile); $profile = ai_profile($uid);
     $rows = array_reverse(all('SELECT id,role,content,created_at FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT 60', [$uid])); $msgs = [];
-    foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $at = gmdate('c', (int) strtotime($r['created_at'] . ' UTC')); $msgs[] = $r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? ''), 'files' => array_values((array) ($c['files'] ?? [])), 'at' => $at] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? [], 'at' => $at]; }
+    foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $at = gmdate('c', (int) strtotime($r['created_at'] . ' UTC')); $msgs[] = ($r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? ''), 'files' => array_values((array) ($c['files'] ?? [])), 'at' => $at] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? [], 'at' => $at]) + (!empty($c['voice']) ? ['voice' => true] : []); }   // voice turns carry a mic badge
     // previews that were already applied / dismissed elsewhere show their real state
     foreach ($msgs as $mi => $m) { foreach ($m['blocks'] ?? [] as $bi => $b) {   // (index based: iterating a `?? []` copy by reference would silently drop the change)
         if (($b['type'] ?? '') === 'doc_estimate') { $msgs[$mi]['blocks'][$bi]['status'] = ai_docs_estimate_open($uid, $b) ? 'open' : 'closed'; }

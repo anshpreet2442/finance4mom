@@ -18,6 +18,7 @@ function voice_mock(): bool { return (string) getenv('MFNC_VOICE_MOCK') === '1';
 function voice_cfg(): array {
     return ['enabled' => site_setting('voice_enabled', '1') === '1', 'key' => secret_get('el_key', 'ELEVENLABS_API_KEY'), 'voice_id' => preg_replace('/[^A-Za-z0-9_-]/', '', site_setting('el_voice_id', (string) (getenv('ELEVENLABS_VOICE_ID') ?: '21m00Tcm4TlvDq8ikWAM'))),
         'model' => preg_replace('/[^A-Za-z0-9_.-]/', '', site_setting('el_model', 'eleven_multilingual_v2')) ?: 'eleven_multilingual_v2', 'stt_model' => preg_replace('/[^A-Za-z0-9_.-]/', '', site_setting('el_stt_model', 'scribe_v1')) ?: 'scribe_v1',
+        'fast_model' => preg_replace('/[^A-Za-z0-9_.-]/', '', site_setting('el_model_fast', 'eleven_flash_v2_5')) ?: 'eleven_flash_v2_5',   // low-latency model for spoken replies (voice assistant)
         'base' => rtrim((string) (getenv('ELEVENLABS_BASE') ?: site_setting('el_base', 'https://api.elevenlabs.io')), '/'), 'cache_mb' => max(5, (int) site_setting('voice_cache_mb', '100')),
         'price_1k' => max(0, (int) site_setting('voice_price_1k', '5000000')), 'cost_1k' => max(0, (int) site_setting('voice_cost_1k', '15000000')), 'stt_price_min' => max(0, (int) site_setting('voice_stt_price_min', '3000000')), 'stt_cost_min' => max(0, (int) site_setting('voice_stt_cost_min', '2500000')),
         'daily_chars' => max(0, (int) site_setting('voice_daily_chars', '20000')), 'daily_stt_sec' => max(0, (int) site_setting('voice_daily_stt_sec', '600')), 'setup_fee' => max(0, (int) site_setting('voice_setup_fee', '49900')), 'setup_days' => max(1, (int) site_setting('voice_setup_days', '30'))];
@@ -42,7 +43,7 @@ function voice_clean_text(string $t, int $max = VOICE_MAX_TTS_CHARS): string {
     $t = trim(preg_replace('/\s+/u', ' ', $t) ?? ''); if (mb_strlen($t) > $max) { $cut = mb_substr($t, 0, $max); $p = max((int) mb_strrpos($cut, '. '), (int) mb_strrpos($cut, '? '), (int) mb_strrpos($cut, '! ')); $t = $p > $max * 0.5 ? mb_substr($cut, 0, $p + 1) : $cut; } return $t;
 }
 function voice_cache_dir(): string { $d = rtrim((string) (getenv('MFNC_VOICE_CACHE') ?: sys_get_temp_dir()), '/') . '/mfnc-voice'; if (!is_dir($d)) { @mkdir($d, 0700, true); } return $d; }
-function voice_hash(string $text, string $format = 'mp3'): string { $c = voice_cfg(); return c_hmac(implode('|', [$c['voice_id'], $c['model'], $format, voice_mock() ? 'mock' : 'live', $text])); /* keyed: another signed-in person cannot probe the cache for a known sentence */ }
+function voice_hash(string $text, string $format = 'mp3', ?string $model = null): string { $c = voice_cfg(); return c_hmac(implode('|', [$c['voice_id'], $model ?? $c['model'], $format, voice_mock() ? 'mock' : 'live', $text])); /* keyed: another signed-in person cannot probe the cache for a known sentence */ }
 function voice_cache_path(string $h, string $format = 'mp3'): string { return voice_cache_dir() . '/' . $h . '.' . ($format === 'opus' ? 'opus' : 'mp3'); }
 function voice_cache_put(string $h, string $bytes, string $format = 'mp3'): void { @file_put_contents(voice_cache_path($h, $format), $bytes, LOCK_EX); voice_cache_trim(); }
 /** Keeps the cache under its size cap by deleting the least recently used files first (down to 80% of the cap). */
@@ -60,10 +61,10 @@ function voice_el_http(string $method, string $url, array $headers, $body, int $
     if ($body !== null) { curl_setopt($ch, CURLOPT_POSTFIELDS, $body); } $raw = curl_exec($ch); $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE); if ($raw === false) { log_error(new RuntimeException('elevenlabs: ' . curl_error($ch))); return [0, '']; } return [$code, (string) $raw];
 }
 /** Text to audio bytes, or null (the caller falls back to the browser voice). */
-function voice_el_tts(string $text, string $format = 'mp3'): ?string {
+function voice_el_tts(string $text, string $format = 'mp3', ?string $model = null): ?string {
     $c = voice_cfg(); if (voice_mock()) { return voice_mock_mp3($text); } if ($c['key'] === '' || $c['voice_id'] === '') { return null; }
     $fmt = $format === 'opus' ? 'opus_48000_64' : 'mp3_44100_64';
-    [$code, $body] = voice_el_http('POST', $c['base'] . '/v1/text-to-speech/' . rawurlencode($c['voice_id']) . '?output_format=' . $fmt, ['xi-api-key: ' . $c['key'], 'Content-Type: application/json', 'Accept: audio/mpeg'], json_encode(['text' => $text, 'model_id' => $c['model']], JSON_UNESCAPED_UNICODE));
+    [$code, $body] = voice_el_http('POST', $c['base'] . '/v1/text-to-speech/' . rawurlencode($c['voice_id']) . '?output_format=' . $fmt, ['xi-api-key: ' . $c['key'], 'Content-Type: application/json', 'Accept: audio/mpeg'], json_encode(['text' => $text, 'model_id' => $model ?? $c['model']], JSON_UNESCAPED_UNICODE));
     if ($code !== 200 || strlen($body) < 100) { log_error(new RuntimeException('elevenlabs tts HTTP ' . $code)); return null; } return $body;
 }
 /** Audio bytes to text, or null. */
@@ -91,8 +92,9 @@ function voice_tts(array $u, string $text, string $source = 'web'): array {
     $clean = voice_clean_text($text); $fallback = fn(string $why = '') => ['engine' => 'browser', 'text' => $clean, 'hint' => VOICE_HINT, 'why' => $why]; if ($clean === '') { return $fallback('empty'); }
     $d = voice_decide($u, 'tts'); if ($d['engine'] !== 'elevenlabs') { return $fallback($d['why']); } $uid = (int) $u['id']; $c = voice_cfg(); $chars = mb_strlen($clean);
     if (!is_exempt_user($u) && feature_cfg('voice')['mode'] === 'payg' && wallet_balance($uid) < voice_tts_price($chars)) { return $fallback('wallet'); }
-    $h = voice_hash($clean); $p = voice_cache_path($h); $cached = is_file($p);
-    if (!$cached) { $bytes = voice_el_tts($clean); if ($bytes === null) { return $fallback('provider'); } voice_cache_put($h, $bytes); } else { @touch($p); }
+    $fast = $source === 'voice' ? $c['fast_model'] : null;   // spoken replies of the voice assistant use the low-latency model
+    $h = voice_hash($clean, 'mp3', $fast); $p = voice_cache_path($h); $cached = is_file($p);
+    if (!$cached) { $bytes = voice_el_tts($clean, 'mp3', $fast); if ($bytes === null) { return $fallback('provider'); } voice_cache_put($h, $bytes); } else { @touch($p); }
     $paid = voice_charge($u, voice_tts_price($chars), 'Voice: ' . $chars . ' characters'); voice_usage_record($uid, 'tts', $chars, 0, $cached ? 0 : (int) ceil($chars / 1000 * $c['cost_1k']), 'elevenlabs', $source);
     return ['engine' => 'elevenlabs', 'url' => url('/voice/audio', ['h' => $h]), 'hash' => $h, 'chars' => $chars, 'cached' => $cached, 'charged_micro' => $paid];
 }
@@ -119,14 +121,14 @@ function voice_stt_bytes(array $u, string $audio, string $mime = 'audio/ogg', in
 // ============================ HTTP endpoints ============================
 function voice_http_status(): void { $u = current_user(); c_json(['ok' => true] + voice_status($u)); }
 function voice_http_tts(): void {
-    [$u, $b] = c_json_guard(); if (!c_rate_ok('vtts:' . $u['id'], 40, 60)) { c_json(['ok' => true, 'engine' => 'browser', 'text' => voice_clean_text((string) ($b['text'] ?? '')), 'hint' => VOICE_HINT, 'why' => 'rate']); }
-    $r = voice_tts($u, (string) ($b['text'] ?? ''), in_array($b['source'] ?? '', ['chat', 'report', 'test', 'web'], true) ? (string) $b['source'] : 'web'); c_json(['ok' => true] + $r);
+    [$u, $b] = c_json_guard(); $isVoice = ($b['source'] ?? '') === 'voice'; if (!c_rate_ok('vtts:' . $u['id'], $isVoice ? 150 : 40, 60)) { c_json(['ok' => true, 'engine' => 'browser', 'text' => voice_clean_text((string) ($b['text'] ?? '')), 'hint' => VOICE_HINT, 'why' => 'rate']); }
+    $r = voice_tts($u, (string) ($b['text'] ?? ''), in_array($b['source'] ?? '', ['chat', 'report', 'test', 'web', 'voice'], true) ? (string) $b['source'] : 'web'); c_json(['ok' => true] + $r);
 }
 function voice_http_stt(): void {
     $u = current_user(); if (!$u) { c_json(['ok' => false, 'message' => 'Sign in again.'], 401); } start_session(); $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''); if ($sent === '' || !hash_equals($_SESSION['csrf'] ?? '', $sent)) { c_json(['ok' => false, 'message' => 'Reload the page.'], 403); } c_session_close();
     if (!c_rate_ok('vstt:' . $u['id'], 20, 60)) { c_json(['ok' => true, 'engine' => 'browser', 'hint' => VOICE_HINT, 'why' => 'rate']); }
     $audio = (string) file_get_contents('php://input', false, null, 0, VOICE_MAX_AUDIO_BYTES + 1); $mime = preg_replace('/[^a-z0-9\/;=+.-]/i', '', (string) ($_SERVER['CONTENT_TYPE'] ?? 'audio/webm')) ?: 'audio/webm'; $mime = explode(';', $mime)[0];
-    c_json(['ok' => true] + voice_stt($u, $audio, $mime, (int) ($_SERVER['HTTP_X_AUDIO_SECONDS'] ?? 0)));
+    c_json(['ok' => true] + voice_stt($u, $audio, $mime, (int) ($_SERVER['HTTP_X_AUDIO_SECONDS'] ?? 0), (($_SERVER['HTTP_X_VOICE_SOURCE'] ?? '') === 'voice') ? 'voice' : 'web'));
 }
 /** Streams a cached audio file with Range support (Safari needs it). Only signed-in people; the file name is an unguessable hash. */
 function voice_http_audio(): void {
@@ -195,7 +197,7 @@ function page_admin_voice(): void {
     echo simple_form('admin-voice-save', [
         ['name' => 'voice_enabled', 'label' => 'Voice features on (read aloud, voice typing, spoken replies)', 'type' => 'checkbox', 'value' => $c['enabled']],
         secret_field('el_key', 'ElevenLabs API key', $c['key'], 'Stored encrypted. Or set ELEVENLABS_API_KEY in the environment.'), ['name' => 'el_key_clear', 'label' => 'Remove the saved key', 'type' => 'checkbox', 'value' => false],
-        ['name' => 'el_voice_id', 'label' => 'Default voice ID', 'half' => true, 'value' => $c['voice_id'], 'hint' => 'From your ElevenLabs voice library.'], ['name' => 'el_model', 'label' => 'Speech model', 'half' => true, 'value' => $c['model']],
+        ['name' => 'el_voice_id', 'label' => 'Default voice ID', 'half' => true, 'value' => $c['voice_id'], 'hint' => 'From your ElevenLabs voice library.'], ['name' => 'el_model', 'label' => 'Speech model', 'half' => true, 'value' => $c['model']], ['name' => 'el_model_fast', 'label' => 'Fast model for the voice assistant', 'half' => true, 'value' => $c['fast_model'], 'hint' => 'Low latency, used for spoken replies. eleven_flash_v2_5 is the usual choice.'],
         ['name' => 'el_stt_model', 'label' => 'Transcription model', 'half' => true, 'value' => $c['stt_model']], ['name' => 'voice_cache_mb', 'label' => 'Audio cache limit (MB)', 'type' => 'number', 'min' => 5, 'max' => 5000, 'half' => true, 'value' => $c['cache_mb']],
         ['name' => 'voice_price_1k', 'label' => 'Price per 1,000 characters (₹, pay as you go)', 'half' => true, 'value' => money_input((int) ($c['price_1k'] / 10000))], ['name' => 'voice_cost_1k', 'label' => 'Your cost per 1,000 characters (₹, for the dashboard)', 'half' => true, 'value' => money_input((int) ($c['cost_1k'] / 10000))],
         ['name' => 'voice_stt_price_min', 'label' => 'Price per minute of voice typing (₹)', 'half' => true, 'value' => money_input((int) ($c['stt_price_min'] / 10000))], ['name' => 'voice_stt_cost_min', 'label' => 'Your cost per minute (₹)', 'half' => true, 'value' => money_input((int) ($c['stt_cost_min'] / 10000))],
@@ -223,7 +225,7 @@ function page_admin_voice(): void {
 function do_admin_voice_save(array $u): string {
     $money = fn(string $k) => post_micro_val($_POST[$k] ?? '0'); $vid = trim((string) ($_POST['el_voice_id'] ?? '')); if ($vid !== '' && !preg_match('/^[A-Za-z0-9_-]{6,40}$/', $vid)) { throw new UserError('A voice ID is letters and digits, like 21m00Tcm4TlvDq8ikWAM.'); }
     $int = fn(string $k, int $lo, int $hi) => max($lo, min($hi, (int) ($_POST[$k] ?? 0)));
-    set_setting('voice_enabled', !empty($_POST['voice_enabled']) ? '1' : '0'); secret_from_post('el_key', 'el_key'); if ($vid !== '') { set_setting('el_voice_id', $vid); } set_setting('el_model', preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['el_model'] ?? '')) ?: 'eleven_multilingual_v2'); set_setting('el_stt_model', preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['el_stt_model'] ?? '')) ?: 'scribe_v1');
+    set_setting('voice_enabled', !empty($_POST['voice_enabled']) ? '1' : '0'); secret_from_post('el_key', 'el_key'); if ($vid !== '') { set_setting('el_voice_id', $vid); } set_setting('el_model', preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['el_model'] ?? '')) ?: 'eleven_multilingual_v2'); set_setting('el_model_fast', preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['el_model_fast'] ?? '')) ?: 'eleven_flash_v2_5'); set_setting('el_stt_model', preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['el_stt_model'] ?? '')) ?: 'scribe_v1');
     set_setting('voice_cache_mb', (string) $int('voice_cache_mb', 5, 5000)); set_setting('voice_price_1k', (string) $money('voice_price_1k')); set_setting('voice_cost_1k', (string) $money('voice_cost_1k')); set_setting('voice_stt_price_min', (string) $money('voice_stt_price_min')); set_setting('voice_stt_cost_min', (string) $money('voice_stt_cost_min'));
     set_setting('voice_daily_chars', (string) $int('voice_daily_chars', 0, 1000000)); set_setting('voice_daily_stt_sec', (string) $int('voice_daily_stt_sec', 0, 86400)); $fee = parse_money(trim((string) ($_POST['voice_setup_fee'] ?? '0')) ?: '0'); if ($fee === null || $fee > 5000000) { throw new UserError('The setup fee is an amount in rupees, up to ₹50,000.'); }
     set_setting('voice_setup_fee', (string) $fee); set_setting('voice_setup_days', (string) $int('voice_setup_days', 1, 366)); audit('admin.voice', 'site'); return 'Voice settings saved.';
