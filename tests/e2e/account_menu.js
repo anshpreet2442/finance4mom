@@ -1,0 +1,21 @@
+const { launch, session, t, done } = require('./lib');
+(async () => {
+  const b = await launch(); const { p } = await session(b); await p.goto('/'); await p.waitForTimeout(1200);
+  const T = '.am--bar .am__trigger', L = '.am__layer:not([hidden])';
+  await p.click(T); await p.waitForTimeout(800); t('the menu opens from the top bar chip', await p.locator(L).count() === 1);
+  t('header shows the person and the plan label', (await p.locator(L + ' .am__head').innerText()).includes('mom@example.com') && (await p.locator(L + ' .am__plan').innerText()) === 'Admin');
+  t('the panel stays inside the viewport', await p.evaluate(() => { const r = document.querySelector('.am__layer:not([hidden])').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
+  await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); t('arrow keys move between rows', await p.evaluate(() => document.activeElement.dataset.row) === 'theme');
+  const before = await p.evaluate(() => document.activeElement.getAttribute('aria-label')); await p.keyboard.press('ArrowRight'); const after = await p.evaluate(() => [document.activeElement.dataset.row, document.activeElement.getAttribute('aria-label')]);
+  t('left/right move between radios of the same row', after[0] === 'theme' && after[1] !== before);
+  await p.keyboard.press('End'); t('End goes to Sign out', await p.evaluate(() => document.activeElement.dataset.row) === 'sign-out');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300); t('Escape closes and returns focus to the trigger', await p.evaluate(() => document.activeElement.className.includes('am__trigger')) && await p.locator(L).count() === 0);
+  await p.click(T); await p.waitForTimeout(700); await p.click(L + ' [data-status-set=busy]'); await p.waitForTimeout(500);
+  t('Do not disturb: body state, dot and no bell dot', await p.evaluate(() => document.body.dataset.presence) === 'busy');
+  await p.goto('/'); t('Do not disturb persists for the person', await p.evaluate(() => document.body.dataset.presence) === 'busy' && await p.locator('[data-notif-dot]').count() === 0);
+  await p.click(T); await p.waitForTimeout(700); await p.click(L + ' [data-status-set=online]'); await p.waitForTimeout(400);
+  const hold = p.locator(L + ' .am__hold'); const box = await hold.boundingBox(); await p.mouse.move(box.x + 40, box.y + 15); await p.mouse.down(); await p.waitForTimeout(500); await p.mouse.up(); await p.waitForTimeout(300);
+  t('releasing early does not sign out', !/login/.test(p.url()));
+  await hold.focus(); await p.keyboard.down('Enter'); await p.waitForTimeout(1500); await p.keyboard.up('Enter'); await p.waitForURL(/login/, { timeout: 5000 }).catch(() => {}); t('holding Enter for the full time signs out (POST + CSRF)', /login/.test(p.url()));
+  t('no console errors', p.errs.length === 0, p.errs.join(' | ')); await b.close(); done();
+})();

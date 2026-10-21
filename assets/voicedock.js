@@ -424,7 +424,8 @@
     p.turn = { ctrl: ctrl, T: T };
     if (speak) { p.speaker = new Speaker({ engine: p.route.tts, onFirstAudio: function () { T.firstAudio = now(); p.logTimings(T); }, onState: function (s) { p.setSpeaking(s === 'playing'); if (s === 'idle' && !p.turnBusy) { p.setStatus(''); p.host.classList.remove('is-busy'); } }, onDone: function () { p.setStatus(''); } }); p.speaker.unlock(); }
     var enqueue = function (chunks) { if (!p.speaker) return; chunks.forEach(function (c) { p.setStatus('Speaking...'); p.speaker.say(c); }); };
-    var payload = { message: text, model: p.state.ai.model, effort: p.state.ai.effort, stt: meta.stt || 'typed' };
+    var pref = function (k) { try { return w.localStorage.getItem('mf.ai.' + k); } catch (e) { return null; } }, st = p.state.ai, pm = pref('model'), pe = pref('effort');   // the model and effort chosen in the chat are used here too
+    var payload = { message: text, model: pm && st.models.some(function (m) { return m.key === pm && !m.locked; }) ? pm : st.model, effort: pe && st.efforts.indexOf(pe) >= 0 ? pe : (st.efforts.indexOf('Low') >= 0 ? 'Low' : st.effort), stt: meta.stt || 'typed' };   // no choice yet: the quickest effort, because someone is waiting for an answer
     var chain = Promise.resolve(), card = function (b) { chain = chain.then(function () { return p.loadBlocks(); }).then(function (api) { p.addCard(api, b); }); };   // the card renderers (ai.js) load the first time a card arrives
     function onEv(ev) {
       if (ev.type === 'status') { if (!p.speaker || !p.speaker.spoken) p.setStatus(ev.text || 'Thinking...'); }

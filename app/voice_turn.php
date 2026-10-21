@@ -110,9 +110,10 @@ function voice_recent(int $uid, int $limit = 8): array {
 function voice_http_state(): void {
     $u = current_user(); if (!$u) { c_json(['ok' => false, 'message' => 'Sign in again.'], 401); }
     $uid = (int) $u['id']; $profile = ai_profile($uid); $gate = voice_ai_visible($u) ? ai_gate($u, false) : ['code' => 'off', 'message' => 'The AI advisor is switched off.'];
+    if (billing_level($u) >= 2) { $gate = ['code' => 'dues', 'message' => 'The app is read-only until your dues are paid, so the advisor is paused. You can still pay on the Dues page.']; }
     c_json(['ok' => true, 'ai' => ['ok' => $gate === null && $profile['stage'] === 'ready', 'code' => $gate['code'] ?? ($profile['stage'] !== 'ready' ? 'setup' : ''), 'message' => $gate['message'] ?? ($profile['stage'] !== 'ready' ? 'Finish the advisor setup in the chat first. Then you can talk to it.' : ''),
         'name' => $profile['agent_name'] ?: 'Your advisor', 'avatar' => ai_avatar_url($profile), 'models' => ai_model_options($u), 'model' => ai_pick_model($u, ''), 'efforts' => array_keys(ai_efforts_cfg()), 'effort' => 'Medium'],
-        'voice' => voice_plan($u), 'recent' => voice_recent($uid), 'links' => ['chat' => url('/ai'), 'plans' => url('/plans'), 'plugins' => url('/plugins') . '#plug-voice', 'settings' => url('/ai/settings')], 'debug' => APP_DEBUG, 'user' => explode(' ', (string) $u['name'])[0]]);
+        'voice' => voice_plan($u), 'recent' => voice_recent($uid), 'dock' => ['on' => feature_on($u, 'dock'), 'pinned' => in_array('voice', dock_pins($uid), true)], 'links' => ['chat' => url('/ai'), 'plans' => url('/plans'), 'plugins' => url('/plugins') . '#plug-voice', 'settings' => url('/ai/settings')], 'debug' => APP_DEBUG, 'user' => explode(' ', (string) $u['name'])[0]]);
 }
 /** POST /ai/voice: one spoken turn, streamed as NDJSON (status, delta, step, block, error, cancelled, timing, done). */
 function handle_ai_voice(): never {

@@ -36,14 +36,19 @@ function acct_initials(string $name): string {
 /** "Admin", or how many plugins are active, or "Free". */
 function acct_plan_label(array $u): string {
     if ($u['role'] === 'admin') { return 'Admin'; }
+    if (PHP_SAPI !== 'cli' && isset($GLOBALS['__acct_plan'][$u['id']])) { return $GLOBALS['__acct_plan'][$u['id']]; }   // one answer per request (the menu is printed up to three times per page)
     $n = (int) val('SELECT COUNT(*) FROM {entitlements} WHERE user_id=? AND valid_until >= ?', [$u['id'], today()]);
-    return $n > 0 ? ($n === 1 ? '1 plugin' : $n . ' plugins') : 'Free';
+    return $GLOBALS['__acct_plan'][$u['id']] = $n > 0 ? ($n === 1 ? '1 plugin' : $n . ' plugins') : 'Free';
 }
 /**
  * The entries of the menu for this person: [key, label, href, icon, value, desktop_only]. Only pages that exist and that the person may open
  * (feature gates, role, dues lock) are listed; the item list never contains a dead link.
  */
 function acct_menu_items(array $u): array {
+    if (PHP_SAPI !== 'cli' && isset($GLOBALS['__acct_items'][$u['id']])) { return $GLOBALS['__acct_items'][$u['id']]; }
+    return $GLOBALS['__acct_items'][$u['id']] = acct_menu_items_build($u);
+}
+function acct_menu_items_build(array $u): array {
     $admin = $u['role'] === 'admin'; $items = [];
     if (billing_level($u) >= 3) { return [['dues', 'Dues & payments', '/dues', 'hand-coins', '', false]]; }   // locked: only the Dues page opens
     $items[] = ['settings', 'Profile & settings', '/settings', 'user', '', false];
