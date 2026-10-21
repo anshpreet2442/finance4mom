@@ -11,27 +11,29 @@ function ai_fix_content(array $content): array {
 function ai_http(array $body): array {
     $c = ai_cfg();
     if (ai_mock()) { return ai_mock_call($body); }
+    $body = ai_fix_body($body);   // never send {} as [] or an empty text block (the API answers invalid_request_error)
+    $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE); if ($json === false) { log_error(new RuntimeException('anthropic: request not encodable: ' . json_last_error_msg())); throw new UserError('That request could not be prepared. Please try again.'); }
     $ch = curl_init($c['base'] . '/v1/messages'); $local = (bool) preg_match('~^http://(127\.0\.0\.1|localhost)~', $c['base']);
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 150, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => !$local, CURLOPT_SSL_VERIFYHOST => $local ? 0 : 2,
-        CURLOPT_HTTPHEADER => ['x-api-key: ' . $c['key'], 'anthropic-version: 2023-06-01', 'content-type: application/json'], CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION)]);
+        CURLOPT_HTTPHEADER => ['x-api-key: ' . $c['key'], 'anthropic-version: 2023-06-01', 'content-type: application/json'], CURLOPT_POSTFIELDS => $json]);
     $raw = curl_exec($ch); $http = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE); $err = curl_error($ch);
     if ($raw === false) { log_error(new RuntimeException('anthropic: ' . $err)); throw new UserError('Could not reach the AI service. Try again in a minute.'); }
     $r = json_decode((string) $raw, true);
     if (!is_array($r)) { log_error(new RuntimeException("anthropic: HTTP $http non-JSON")); throw new UserError('The AI service sent an unexpected reply. Try again.'); }
-    if ($http === 400 && ($r['error']['type'] ?? '') === 'invalid_request_error' && (isset($body['thinking']) || isset($body['output_config']))) {
+    if ($http === 400 && ($r['error']['type'] ?? '') === 'invalid_request_error' && (isset($body['thinking']) || isset($body['output_config'])) && preg_match('/thinking|effort|output_config|budget/i', (string) ($r['error']['message'] ?? ''))) {
         // the chosen model does not accept this thinking/effort setting: log it, and answer without it instead of failing the chat
-        log_error(new RuntimeException('anthropic: retrying without thinking: ' . ($r['error']['message'] ?? ''))); unset($body['thinking'], $body['output_config']); return ai_http($body);
+        log_error(new RuntimeException('anthropic: retrying without thinking: ' . ai_redact((string) ($r['error']['message'] ?? '')))); unset($body['thinking'], $body['output_config']); return ai_http($body);
     }
     if ($http >= 400 || ($r['type'] ?? '') === 'error') {
-        $t = $r['error']['type'] ?? ''; log_error(new RuntimeException("anthropic: HTTP $http $t " . ($r['error']['message'] ?? '')));
-        throw new UserError(match (true) { $http === 401 || $http === 403 => 'The AI service rejected the API key. The administrator needs to check it.', $http === 429 || $http === 529 => 'The AI service is busy right now. Try again in a minute.', $http === 404 => 'The selected AI model is not available to this API key. The administrator can pick another model.',
-            default => 'The AI service returned an error (' . ($t ?: "HTTP $http") . ').' . ((($cu = current_user()) && ($cu['role'] ?? '') === 'admin' && !empty($r['error']['message'])) ? ' Details for administrators: ' . mb_substr((string) $r['error']['message'], 0, 300) : '') });
+        log_error(new RuntimeException("anthropic: HTTP $http " . ($r['error']['type'] ?? '') . ' ' . ai_redact((string) ($r['error']['message'] ?? ''))));
+        throw ai_api_error($http, $r);
     }
     return $r;
 }
 
 /** A scripted stand-in for the Messages API (MFNC_AI_MOCK=1). Deterministic: keywords in the last user message pick a tool path. */
 function ai_mock_call(array $body): array {
+    ai_mock_guard($body);   // fail like the real API when the request is malformed
     $msgs = $body['messages']; $last = end($msgs); $plain = ''; $rounds = 0; $results = [];
     $files = 0; for ($i = count($msgs) - 1; $i >= 0; $i--) { $m = $msgs[$i]; if ($m['role'] === 'user' && is_array($m['content']) && !array_filter($m['content'], fn($b) => ($b['type'] ?? '') === 'tool_result')) { foreach ($m['content'] as $b) { if (in_array($b['type'] ?? '', ['image', 'document'], true)) { $files++; } if (($b['type'] ?? '') === 'text') { $plain .= $b['text'] . "\n"; } } break; } if ($m['role'] === 'user' && is_string($m['content'])) { $plain = $m['content']; break; } if ($m['role'] === 'user' && is_array($m['content'])) { $rounds++; foreach ($m['content'] as $b) { if (($b['type'] ?? '') === 'tool_result') { $results[] = json_decode((string) $b['content'], true); } } } }
     $t = mb_strtolower($plain); $tu = fn($name, $in) => ['type' => 'tool_use', 'id' => 'toolu_' . bin2hex(random_bytes(6)), 'name' => $name, 'input' => $in];

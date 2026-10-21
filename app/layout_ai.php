@@ -152,6 +152,7 @@ function layout_ai_http(): never {
 // ============================ mock model (MFNC_AI_MOCK=1) ============================
 /** Deterministic stand-in: reads the request keywords, proposes operations, and reacts to the server's rejections (so the verify loop is testable). */
 function lw_mock_call(array $body): array {
+    ai_mock_guard($body);
     $msgs = $body['messages']; $first = $msgs[0]['content']; $t = mb_strtolower(is_string($first) ? (str_contains($first, 'Request: ') ? substr($first, (int) strrpos($first, 'Request: ') + 9) : $first) : ''); $rounds = (int) floor((count($msgs) - 1) / 2); $last = end($msgs); $results = [];
     if (is_array($last['content'] ?? null)) { foreach ($last['content'] as $b) { if (($b['type'] ?? '') === 'tool_result') { $results[] = json_decode((string) $b['content'], true); } } }
     $tu = fn($n, $in) => ['type' => 'tool_use', 'id' => 'toolu_' . bin2hex(random_bytes(6)), 'name' => $n, 'input' => $in]; $out = fn($c, $s) => ['id' => 'msg_mock', 'type' => 'message', 'role' => 'assistant', 'model' => $body['model'], 'content' => $c, 'stop_reason' => $s, 'usage' => ['input_tokens' => (int) ceil(strlen(json_encode($body)) / 4), 'output_tokens' => 60]];

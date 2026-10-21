@@ -220,7 +220,14 @@ function tg_ai_message(int $chat, array $u, array $link, string $text, ?string $
                 $messages[] = ['role' => 'user', 'content' => $results];
                 if ($g = ai_gate($u, false)) { $items[] = ['text', $g['message']]; break; }
             }
-        } catch (UserError $e) { $items[] = ['text', 'I hit a snag talking to my brain: ' . $e->getMessage()]; }
+        } catch (UserError $e) {
+            $m = $e->getMessage();
+            if ($e instanceof AiApiError && $e->apiType !== '') {   // the API's own words go to the admin log (secrets removed) and, for an administrator, into the chat; everyone else gets the friendly line
+                tg_log('out', $chat, $uid, 'ai', 'failed', $e->apiType . ' HTTP ' . $e->http . ': ' . $e->apiMessage);
+                if (($u['role'] ?? '') === 'admin' && $e->apiMessage !== '' && !str_contains($m, 'Details for administrators')) { $m .= ' Details for administrators: ' . mb_substr($e->apiMessage, 0, 300); }
+            }
+            $items[] = ['text', 'I hit a snag talking to my brain: ' . $m];
+        }
         tg_ai_deliver($chat, $u, $items, $btnRows, $c['max_reply']);
         tg_ai_remember($u, $text !== '' || !$image ? ($image ? '[sent a photo] ' : '') . $text : '[sent a photo]', $prose, $items);
     } catch (Throwable $e) { log_error($e); tg_log('out', $chat, $uid, 'ai', 'failed', get_class($e)); tg_send($chat, 'Hmm, I tripped over something on my side. Try again in a moment.', null, [], $uid); }
@@ -301,6 +308,7 @@ function tg_ai_callback(string $id, int $chat, ?int $mid, array $u, array $link,
 // ============================ scripted model for tests (MFNC_AI_MOCK=1) ============================
 /** Deterministic stand-in for the Messages API, Telegram flavour. Anything it does not know falls through to the web mock. */
 function tg_mock_call(array $body): array {
+    ai_mock_guard($body);
     $msgs = $body['messages']; $plain = ''; $rounds = 0; $results = []; $image = false;
     for ($i = count($msgs) - 1; $i >= 0; $i--) {
         $m = $msgs[$i]; if ($m['role'] !== 'user') { continue; }

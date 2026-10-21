@@ -5,9 +5,9 @@ declare(strict_types=1);
  * JSON endpoints (c_route, called once from index.php), small helpers and a tiny rate limiter.
  * Features living on top: AI Layout (layout.php, layout_ai.php), voice (voice.php), PDF export (pdf.php), share links (share.php, qr.php), payment page (paypage.php).
  */
-const C_SCHEMA_VERSION = 4;
+const C_SCHEMA_VERSION = 5;
 // the feature files (loaded here so bootstrap.php and the test runner only need to know about c_core)
-foreach (['qr', 'share', 'pdf', 'voice', 'layout', 'layout_ai', 'paypage'] as $__f) { if (is_file(__DIR__ . "/$__f.php")) { require_once __DIR__ . "/$__f.php"; } }
+foreach (['qr', 'share', 'pdf', 'voice', 'layout', 'layout_ai', 'paypage', 'ai_guard', 'ai_docs', 'import_fallback', 'import_json'] as $__f) { if (is_file(__DIR__ . "/$__f.php")) { require_once __DIR__ . "/$__f.php"; } }
 unset($__f);
 
 function c_schema(): array {
