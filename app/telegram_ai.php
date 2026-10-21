@@ -148,7 +148,7 @@ function tg_pre_table(array $cols, array $rows, int $maxW = 34): string {
  * 'rich' means something was cut short, so the caller adds an "Open in app" button.
  */
 function tg_render_block(array $b, int $chat, int $uid): array {
-    $t = (string) ($b['type'] ?? ''); $m = fn(string $h, array $x = []) => [['html' => $h, 'markup' => null, 'photo' => null, 'rich' => false] + $x];
+    $t = (string) ($b['type'] ?? ''); $m = fn(string $h, array $x = []) => [$x + ['html' => $h, 'markup' => null, 'photo' => null, 'rich' => false]];
     switch ($t) {
         case 'text': return $m(tg_h((string) $b['text']));
         case 'callout': return $m('<blockquote>' . ['good' => '🟢 ', 'warn' => '🟠 ', 'bad' => '🔴 '][$b['tone'] ?? 'warn'] . tg_h((string) $b['text']) . '</blockquote>');

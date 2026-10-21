@@ -21,7 +21,8 @@ function tg_pending_get(int $id, int $uid, int $chat, ?string $kind = null): ?ar
 }
 function tg_pending_set(int $id, array $payload): void { run('UPDATE {telegram_pending} SET payload=? WHERE id=?', [json_encode($payload, JSON_UNESCAPED_UNICODE), $id]); }
 function tg_pending_close(int $id, string $status = 'done'): void { run('UPDATE {telegram_pending} SET status=? WHERE id=?', [$status, $id]); }
-function tg_ai_active(array $u): bool { return feature_on($u, 'telegram_ai') && ai_ready(); }
+/** True when the person owns the Telegram AI plugin (whether the AI service is configured is reported by the gate in tg_ai_message). */
+function tg_ai_active(array $u): bool { $fa = feature_access($u, 'telegram_ai'); return $fa['ok'] || $fa['code'] === 'wallet'; }
 
 const TG_MENU_LABELS = ['balance' => '💰 Balance', 'bills' => '🧾 Bills', 'goals' => '🎯 Goals', 'report' => '📊 Report', 'add' => '➕ Add', 'help' => '❓ Help'];
 function tg_reply_keyboard(): array {

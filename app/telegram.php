@@ -53,7 +53,7 @@ function tg_api(string $method, array $params = [], array $files = [], int $time
 }
 /** Downloads a file Telegram holds (photos). Returns the bytes, or null. Size capped. */
 function tg_download(string $fileId, int $max = 5_000_000): ?array {
-    $c = tg_cfg(); $r = tg_api('getFile', ['file_id' => $fileId])['result'] ?? null; if (!is_array($r) || empty($r['file_path']) || (int) ($r['file_size'] ?? 0) > $max) { return null; }
+    $c = tg_cfg(); try { $r = tg_api('getFile', ['file_id' => $fileId])['result'] ?? null; } catch (Throwable) { return null; } if (!is_array($r) || empty($r['file_path']) || (int) ($r['file_size'] ?? 0) > $max) { return null; }
     $ch = curl_init($c['base'] . '/file/bot' . $c['token'] . '/' . $r['file_path']); $local = tg_local_base($c['base']);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => !$local, CURLOPT_SSL_VERIFYHOST => $local ? 0 : 2]);
     $raw = curl_exec($ch); if ($raw === false || (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE) !== 200 || strlen((string) $raw) > $max) { return null; }
@@ -149,7 +149,7 @@ function tg_link_consume(string $token, int $chat, array $from = []): array {
             $name = mb_substr(trim((string) ($from['first_name'] ?? '')), 0, 80); $un = mb_substr((string) ($from['username'] ?? ''), 0, 64);
             if ($mine) { run('UPDATE {telegram_links} SET chat_id=?, tg_username=?, first_name=?, linked_at=UTC_TIMESTAMP(), last_seen_at=UTC_TIMESTAMP() WHERE user_id=?', [$chat, $un ?: null, $name ?: null, $uid]); }
             else { run('INSERT INTO {telegram_links} (user_id,chat_id,tg_username,first_name,last_seen_at) VALUES (?,?,?,?,UTC_TIMESTAMP())', [$uid, $chat, $un ?: null, $name ?: null]); }
-            run('DELETE FROM {telegram_tokens} WHERE user_id=?', [$uid]); run('UPDATE {telegram_pending} SET status=? WHERE user_id=? AND status=?', ['cancelled', $uid, 'open']);
+            run('DELETE FROM {telegram_tokens} WHERE user_id=? AND used_at IS NULL', [$uid]); run('UPDATE {telegram_pending} SET status=? WHERE user_id=? AND status=?', ['cancelled', $uid, 'open']);
             return ['ok' => true, 'code' => 'ok', 'user_id' => $uid, 'old_chat' => $old];
         });
     } catch (PDOException $e) { log_error($e); return $bad('chat_taken'); } // unique constraints are the last line of defence
