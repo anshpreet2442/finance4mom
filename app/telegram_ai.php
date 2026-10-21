@@ -181,6 +181,7 @@ function tg_render_block(array $b, int $chat, int $uid): array {
         case 'preview': {
             $o = '<b>Preview</b>' . "\n" . tg_h($b['title']) . "\n"; $bf = $b['before']; $af = $b['after'];
             foreach ($af as $k => $v) { if (is_scalar($v) || $v === null) { $o .= '<i>' . tg_h(ucfirst(str_replace('_', ' ', (string) $k))) . ':</i> ' . tg_h(isset($bf[$k]) && is_scalar($bf[$k]) ? tg_prev_val($bf[$k]) . ' → ' . tg_prev_val($v) : tg_prev_val($v)) . "\n"; } }
+            if (!empty($b['rows'])) { $o .= "\n"; foreach (array_slice($b['rows'], 0, 8) as $r) { $o .= '• ' . tg_h((string) $r[0]) . ' · ' . tg_h(mb_substr((string) $r[1], 0, 26)) . ' · ' . tg_h(($r[3] ?? '') === 'income' ? '+' : '') . tg_h(inr_s(((int) $r[2]) / 100)) . "\n"; } if (($b['rows_total'] ?? 0) > 8) { $o .= '… and ' . ((int) $b['rows_total'] - 8) . " more\n"; } $o .= "\n"; }
             if ($b['reason'] !== '') { $o .= '“' . tg_h($b['reason']) . '”' . "\n"; } $o .= "\n<i>Nothing has changed yet.</i>";
             return $m(rtrim($o), ['markup' => [[tg_btn('✅ Apply', tg_cb($chat, $uid, 'ap', (int) $b['action_id'])), tg_btn('Not now', tg_cb($chat, $uid, 'dm', (int) $b['action_id']))]]]);
         }
@@ -284,7 +285,7 @@ function tg_ai_callback(string $id, int $chat, ?int $mid, array $u, array $link,
     if ($op === 'un') { // undoing is always allowed, even after the plugin lapsed
         $msg = ai_undo($uid, $arg); tg_log('out', $chat, $uid, 'action:ai-undo', 'ok', 'action#' . $arg); tg_answer($id, 'Undone.'); tg_edit($chat, $mid, '↩️ ' . tg_h($msg)); return;
     }
-    if (!in_array($op, ['ap', 'dm', 'pv', 'q', 'ch'], true)) { tg_answer($id, 'That button is not valid any more.', true); return; }
+    if (!in_array($op, ['ap', 'dm', 'pv', 'q', 'ch', 'dr', 'dx'], true)) { tg_answer($id, 'That button is not valid any more.', true); return; }
     if (!feature_on($u, 'telegram_ai')) { tg_answer($id, 'The Telegram AI plugin is not on your account.', true); tg_send($chat, 'That needs the <b>Telegram AI plugin</b>: ' . tg_h(tg_shop_url()), null, [], $uid); return; }
     switch ($op) {
         case 'ap':
@@ -300,6 +301,12 @@ function tg_ai_callback(string $id, int $chat, ?int $mid, array $u, array $link,
         case 'q': {
             $p = tg_pending_get($arg, $uid, $chat, 'ask') ?? throw new UserError('That question expired. Just type it.'); tg_pending_close($arg); tg_answer($id);
             tg_send($chat, '<i>' . tg_h($p['data']['text']) . '</i>', null, [], $uid); tg_ai_message($chat, $u, $link, (string) $p['data']['text']); return;
+        }
+        case 'dr': {   // "Read it": the person saw the price and agreed
+            $p = tg_pending_get($arg, $uid, $chat, 'docs') ?? throw new UserError('That question expired. Send the file again.'); tg_pending_close($arg); tg_answer($id, 'Reading…'); tg_docs_run($chat, $u, $p['data']); return;
+        }
+        case 'dx': {
+            $p = tg_pending_get($arg, $uid, $chat, 'docs'); if ($p) { tg_pending_close($arg, 'cancelled'); ai_upload_discard(ai_load_uploads($uid, array_map('intval', (array) ($p['data']['files'] ?? [])))); } tg_answer($id, 'Cancelled.'); tg_edit($chat, $mid, 'Okay, I did not read it and you were not charged.'); return;
         }
         case 'ch': {
             $name = TG_CHARTS[(string) ($args[0] ?? '')] ?? throw new UserError('Unknown chart.'); tg_answer($id, 'Drawing it…'); tg_typing($chat, 'upload_photo');
@@ -346,4 +353,45 @@ function tg_mock_call(array $body): array {
     if (str_contains($t, 'long reply')) { return $text(str_repeat('This sentence is here to be long and chatty. ', 60)); }
     if (preg_match('/\b(hi|hello|hey)\b/', $t)) { return $text("Uhh, okay so hi! What's on your mind, money-wise?"); }
     return ai_mock_call($body);
+}
+
+// ============================ documents (photos and PDFs) in Telegram ============================
+/** A photo or document arrived: store it, show the price, and wait for the person's tap. Never throws. */
+function tg_docs_start(int $chat, array $u, array $link, string $text, string $fileId, bool $pdf = false): void {
+    $uid = (int) $u['id'];
+    try {
+        if ($g = tg_ai_gate($u, $chat)) { tg_log('out', $chat, $uid, 'ai-blocked', 'skipped', $g['code']); tg_send($chat, $g['message'], null, [], $uid); return; }
+        tg_log('in', $chat, $uid, 'ai-doc'); tg_typing($chat);
+        $dl = tg_download($fileId, 5_000_000, true); if (!$dl) { tg_send($chat, "I couldn't open that file. Try sending it again (photos and PDFs up to 5 MB).", null, [], $uid); return; }
+        $ext = ['application/pdf' => 'pdf', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'][$dl['mime']] ?? 'jpg'; $tmp = tempnam(sys_get_temp_dir(), 'tgd'); file_put_contents($tmp, $dl['bytes']);
+        try { $up = ai_store_upload($u, ['tmp_name' => $tmp, 'name' => ($dl['mime'] === 'application/pdf' ? 'document' : 'photo') . '.' . $ext, 'size' => strlen($dl['bytes']), 'error' => 0]); } catch (UserError $e) { tg_send($chat, $e->getMessage(), null, [], $uid); return; } finally { @unlink($tmp); }
+        $text = trim(mb_substr($text, 0, 500)); tg_docs_run($chat, $u, ['files' => [(int) $up['id']], 'text' => $text !== '' ? $text : 'Read this and propose what to add.', 'confirmed' => false]);
+    } catch (Throwable $e) { log_error($e); tg_log('out', $chat, $uid, 'ai-doc', 'failed', get_class($e)); tg_send($chat, 'Hmm, I tripped over something on my side. Try again in a moment.', null, [], $uid); }
+}
+/** Runs the shared document flow and turns what it reports into Telegram messages (estimate with buttons, result, previews with Apply / Not now). */
+function tg_docs_run(int $chat, array $u, array $p): void {
+    $uid = (int) $u['id']; $profile = ai_profile($uid); $ev = []; $files = ai_load_uploads($uid, array_map('intval', (array) ($p['files'] ?? [])));
+    if (!$files) { tg_send($chat, 'That file is no longer available. Please send it again.', null, [], $uid); return; }
+    try { ai_docs_turn($u, $profile, (string) ($p['text'] ?? ''), $files, ['docs_ok' => !empty($p['confirmed']), 'nosave' => true, 'effort' => ''], function ($e) use (&$ev) { $ev[] = $e; }, tg_ai_model()); }
+    catch (UserError $e) { $ev[] = ['type' => 'error', 'message' => $e->getMessage()]; if ($e instanceof AiApiError && $e->apiType !== '') { tg_log('out', $chat, $uid, 'ai', 'failed', $e->apiType . ' HTTP ' . $e->http . ': ' . $e->apiMessage); } }
+    $items = []; $btn = [];
+    foreach ($ev as $e) {
+        $t = $e['type'] ?? ''; $b = $e['block'] ?? null;
+        if ($t === 'error') { $items[] = ['text', (string) $e['message']]; continue; }
+        if (!is_array($b)) { continue; }
+        if ($b['type'] === 'doc_estimate') {
+            $pid = tg_pending_new($uid, $chat, 'docs', ['files' => $b['files'], 'text' => $b['text'], 'confirmed' => true]);
+            $o = '<b>Ready to read</b>' . "\n"; foreach ($b['docs'] as $d) { $o .= '• ' . tg_h(mb_substr($d['name'], 0, 40)) . ' · ' . (int) $d['pages'] . ' page' . ((int) $d['pages'] === 1 ? '' : 's') . "\n"; }
+            $o .= "\n<b>About " . tg_h(micro_to_inr((int) $b['total_micro'])) . '</b> (' . tg_h(micro_to_inr((int) $b['token_micro'])) . ' for the AI' . ((int) $b['fee_micro'] > 0 ? ' + ' . tg_h(micro_to_inr((int) $b['fee_micro'])) . ' service fee' : '') . '). ' . ($b['pays'] === 'free' ? 'Free for you.' : ($b['pays'] === 'wallet' ? 'It comes from your wallet.' : 'It counts against your AI budget' . ((int) $b['fee_micro'] > 0 ? ' and your wallet.' : '.')));
+            if ($b['note'] !== '') { $o .= "\n" . tg_h($b['note']); } $o .= "\nNothing is read or saved until you tap.";
+            tg_send($chat, $o, ['inline_keyboard' => [[tg_btn('✅ Read it', tg_cb($chat, $uid, 'dr', $pid)), tg_btn('Cancel', tg_cb($chat, $uid, 'dx', $pid))]]], [], $uid); continue;
+        }
+        if ($b['type'] === 'doc_result') {
+            $o = 'I read ' . (int) $b['pages_read'] . ' page' . ((int) $b['pages_read'] === 1 ? '' : 's') . ' of ' . $b['name'] . ' and found ' . (int) $b['rows'] . ' transaction' . ((int) $b['rows'] === 1 ? '' : 's') . ((int) $b['dups'] > 0 ? ' (' . (int) $b['dups'] . ' already in your ledger, left out)' : '') . '.';
+            if ((int) $b['total_micro'] > 0) { $o .= ' Cost ' . micro_to_inr((int) $b['total_micro']) . '.'; } foreach ($b['notes'] as $n) { $o .= "\n" . $n; } $items[] = ['text', $o]; continue;
+        }
+        if ($b['type'] === 'preview') { $items[] = ['block', $b]; continue; }
+        if (in_array($b['type'], ['text', 'callout'], true)) { $items[] = ['text', (string) ($b['text'] ?? '')]; }
+    }
+    if ($items) { tg_ai_deliver($chat, $u, $items, [], tg_cfg()['max_reply']); }
 }

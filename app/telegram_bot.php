@@ -42,7 +42,8 @@ function tg_on_message(array $m): void {
     $chat = (int) ($m['chat']['id'] ?? 0); if (!$chat || ($m['chat']['type'] ?? '') !== 'private') { return; }
     $from = is_array($m['from'] ?? null) ? $m['from'] : []; if (!empty($from['is_bot'])) { return; }
     $text = trim(mb_substr((string) ($m['text'] ?? $m['caption'] ?? ''), 0, 2000)); $photo = !empty($m['photo']) && is_array($m['photo']);
-    if ($text === '' && !$photo) { return; }
+    $doc = !$photo && !empty($m['document']['file_id']) && in_array(strtolower((string) ($m['document']['mime_type'] ?? '')), ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], true);   // a PDF or an image sent as a file
+    if ($text === '' && !$photo && !$doc) { return; }
     if ($lim = tg_rate_hit($chat)) {
         $first = (int) val("SELECT COUNT(*) FROM {telegram_log} WHERE direction='in' AND status='skipped' AND kind='rate' AND chat_id=? AND created_at >= ?", [$chat, gmdate('Y-m-d H:i:s', time() - 60)]) === 0;
         tg_log('in', $chat, null, 'rate', 'skipped', $lim);
@@ -62,6 +63,7 @@ function tg_on_message(array $m): void {
     if (!$fa['ok']) { tg_send($chat, 'The Telegram bot is part of a paid plan, and yours has not been unlocked yet. Get it here: ' . tg_h(tg_shop_url()), null, [], (int) $u['id']); return; }
     $s = tg_boot($u);
     if ($photo) { tg_on_photo($chat, $u, $link, $m, $text); return; }
+    if ($doc) { tg_on_document($chat, $u, $link, $m, $text); return; }
     if ($cmd === null && ($lc = tg_label_to_command($text))) { $cmd = $lc; $arg = ''; }
     if ($cmd !== null) { tg_run_command($chat, $u, $link, $s, $cmd, $arg); return; }
     // plain text: a pending guided "add", then the AI (if owned), then the simple parser
@@ -325,7 +327,16 @@ function tg_on_photo(int $chat, array $u, array $link, array $m, string $caption
     $sizes = $m['photo']; usort($sizes, fn($a, $b) => ((int) ($b['file_size'] ?? 0)) <=> ((int) ($a['file_size'] ?? 0))); $pick = null;
     foreach ($sizes as $ph) { if ((int) ($ph['file_size'] ?? 0) <= 4_000_000 && !empty($ph['file_id'])) { $pick = $ph; break; } }
     if (!$pick) { tg_send($chat, 'That photo is too big for me. Send a smaller one.', null, [], $uid); return; }
+    if (function_exists('tg_docs_start')) { tg_docs_start($chat, $u, $link, $caption, (string) $pick['file_id']); return; }   // price first, then reading (ai_docs.php)
     tg_ai_message($chat, $u, $link, $caption !== '' ? $caption : 'Here is a receipt. Read it and propose the expense for me to confirm.', (string) $pick['file_id']);
+}
+/** A file (PDF or picture sent as a document). PDFs are the "PDF documents (AI)" plugin; pictures work for everyone with the Telegram AI plugin. */
+function tg_on_document(int $chat, array $u, array $link, array $m, string $caption): void {
+    $uid = (int) $u['id']; $d = $m['document']; $isPdf = strtolower((string) ($d['mime_type'] ?? '')) === 'application/pdf';
+    if (!tg_ai_active($u)) { $up = !feature_on($u, 'telegram_ai') ? "\n\nReading documents is part of the <b>Telegram AI plugin</b>: " . tg_h(tg_shop_url()) : ''; tg_send($chat, 'Thanks, but I cannot read documents yet.' . $up, null, [], $uid); return; }
+    if ($isPdf && !feature_on($u, 'ai_docs')) { tg_send($chat, 'Reading PDFs is the <b>PDF documents (AI)</b> plugin, which is not on your account: ' . tg_h(abs_url('/plugins')) . "\nPhotos work without it.", null, [], $uid); return; }
+    if ((int) ($d['file_size'] ?? 0) > 4_800_000) { tg_send($chat, 'That file is too big for me (limit 5 MB). Send fewer pages.', null, [], $uid); return; }
+    tg_docs_start($chat, $u, $link, $caption, (string) $d['file_id'], $isPdf);
 }
 
 // ============================ memory ============================

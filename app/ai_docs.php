@@ -200,7 +200,8 @@ function ai_docs_record(array $u, string $model, array $doc, array $chunks, int 
 function ai_docs_turn(array $u, array $profile, string $text, array $files, array $opts, callable $emit, string $model): bool {
     [$docs, $others] = ai_docs_split($files); if (!$docs) { return false; }
     $uid = (int) $u['id']; $resume = !empty($opts['docs_ok']); $cfg = ai_docs_cfg(); $names = array_column($files, 'name');
-    if (!$resume) { ai_save_message($uid, 'user', ['text' => $text] + ['files' => $names]); }
+    $save = empty($opts['nosave']);   // Telegram keeps its own memory; its documents must not appear in the web chat history
+    if (!$resume && $save) { ai_save_message($uid, 'user', ['text' => $text] + ['files' => $names]); }
     $fail = function (string $code, string $msg) use ($emit, $files, $uid) { ai_upload_discard($files); $emit(['type' => 'error', 'code' => $code, 'message' => $msg]); $emit(['type' => 'done']); return true; };
     // PDFs without the plugin: say so and carry on with the pictures
     $allowed = []; $blockedMsg = [];
@@ -214,7 +215,7 @@ function ai_docs_turn(array $u, array $profile, string $text, array $files, arra
     if (!$resume && !$auto) {
         $blk = ['type' => 'doc_estimate', 'docs' => array_map(fn($x) => ['name' => $x['name'], 'kind' => $x['kind'], 'pages' => $x['pages'], 'total' => $x['total_micro']], $est['docs']), 'pages' => $est['pages'], 'total_micro' => $est['total_micro'], 'token_micro' => $est['token_micro'], 'fee_micro' => $est['fee_micro'], 'pays' => $est['pays'],
             'wallet_micro' => $est['wallet_micro'], 'budget_left_micro' => $est['budget_left_micro'], 'files' => array_map(fn($d) => (int) $d['row']['id'], $allowed), 'text' => $text, 'model' => $model, 'effort' => (string) ($opts['effort'] ?? ''), 'note' => $skipped, 'status' => 'open'];
-        ai_save_message($uid, 'assistant', ['blocks' => [$blk]]); $emit(['type' => 'block', 'block' => $blk]); $emit(['type' => 'done']); return true;
+        if ($save) { ai_save_message($uid, 'assistant', ['blocks' => [$blk]]); } $emit(['type' => 'block', 'block' => $blk]); $emit(['type' => 'done']); return true;
     }
     // ---- read ----
     $saved = []; $push = function (array $b) use (&$saved, $emit) { $saved[] = $b; $emit(['type' => 'block', 'block' => $b]); };
@@ -260,7 +261,7 @@ function ai_docs_turn(array $u, array $profile, string $text, array $files, arra
     }
     if ($skipped !== '') { $push(['type' => 'callout', 'tone' => 'warn', 'text' => $skipped]); }
     if ($anyOk) { $push(['type' => 'text', 'text' => 'Nothing is saved yet. Press **Apply** on a preview to add it, or Dismiss. Every applied change can be undone.']); }
-    if ($saved) { ai_save_message($uid, 'assistant', ['blocks' => $saved]); }
+    if ($saved && $save) { ai_save_message($uid, 'assistant', ['blocks' => $saved]); }
     $emit(['type' => 'done']); return true;
 }
 /** One preview (Apply / Dismiss / undo) for a batch of transactions or bills. */

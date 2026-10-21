@@ -52,12 +52,12 @@ function tg_api(string $method, array $params = [], array $files = [], int $time
     return $r;
 }
 /** Downloads a file Telegram holds (photos). Returns the bytes, or null. Size capped. */
-function tg_download(string $fileId, int $max = 5_000_000): ?array {
+function tg_download(string $fileId, int $max = 5_000_000, bool $allowPdf = false): ?array {
     $c = tg_cfg(); try { $r = tg_api('getFile', ['file_id' => $fileId])['result'] ?? null; } catch (Throwable) { return null; } if (!is_array($r) || empty($r['file_path']) || (int) ($r['file_size'] ?? 0) > $max) { return null; }
     $ch = curl_init($c['base'] . '/file/bot' . $c['token'] . '/' . $r['file_path']); $local = tg_local_base($c['base']);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => !$local, CURLOPT_SSL_VERIFYHOST => $local ? 0 : 2]);
     $raw = curl_exec($ch); if ($raw === false || (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE) !== 200 || strlen((string) $raw) > $max) { return null; }
-    $mime = (new finfo(FILEINFO_MIME_TYPE))->buffer((string) $raw); return in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? ['bytes' => (string) $raw, 'mime' => $mime] : null;
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->buffer((string) $raw); return in_array($mime, array_merge(['image/jpeg', 'image/png', 'image/webp', 'image/gif'], $allowPdf ? ['application/pdf'] : []), true) ? ['bytes' => (string) $raw, 'mime' => $mime] : null;
 }
 function tg_log(string $dir, ?int $chat, ?int $uid, string $kind, string $status = 'ok', ?string $detail = null): void {
     try { run('INSERT INTO {telegram_log} (direction,chat_id,user_id,kind,status,detail) VALUES (?,?,?,?,?,?)', [$dir, $chat, $uid, mb_substr($kind, 0, 40), $status, $detail === null ? null : mb_substr(tg_scrub($detail), 0, 300)]); } catch (Throwable) {}
