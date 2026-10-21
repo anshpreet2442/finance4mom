@@ -234,3 +234,14 @@ svg .bar:hover { filter: brightness(1.06); }
 @media (min-width: 560px) { .stat-trio { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .stat-trio > div { min-width: 0; }
 .stat-trio .num { font-size: clamp(1.25rem, 2.2vw, 1.6rem); }
+
+/* ---------- 12. Fixes for utility-vs-component order (m-sheet is defined after the lg: utilities, so they never applied) ---------- */
+@media (min-width: 1024px) {
+  .m-sheet.lg\:mt-0 { margin-top: 0; }
+  .m-sheet.lg\:bg-transparent { background: transparent; }
+  .m-sheet.lg\:shadow-none { box-shadow: none; }
+}
+/* scrolling tab strips: room for the active pill's shadow so it is never clipped, soft edge fades */
+[data-scroll-active] { padding: 8px 10px 12px; margin-inline: -10px; scrollbar-width: none; scroll-padding-inline: 16px; }
+[data-scroll-active]::-webkit-scrollbar { display: none; }
+@media (max-width: 1023.98px) { [data-scroll-active] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent); } }
