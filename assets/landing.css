@@ -61,3 +61,4 @@ body.lp { margin: 0; background: var(--lp-bg); color: var(--lp-tx); font: 400 16
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .lp-rv { opacity: 1; transform: none; transition: none; } .lp-card, .lp-tier { transition: none; } }
 .lp .size-4 { width: 1rem; height: 1rem; } .lp .size-5 { width: 1.25rem; height: 1.25rem; } .lp .size-6 { width: 1.5rem; height: 1.5rem; } .lp .shrink-0 { flex: none; }
 .lp svg:not([class]) { max-width: 100%; }
+.lp-pills { display: block; margin-bottom: 1rem; }

@@ -28,7 +28,7 @@ function page_welcome(): void {
 <title><?= e($title) ?></title><meta name="description" content="<?= e($desc) ?>"><link rel="canonical" href="<?= e($canon) ?>"><meta name="robots" content="index, follow"><meta name="theme-color" content="#07070a"><meta name="color-scheme" content="dark">
 <meta property="og:type" content="website"><meta property="og:title" content="<?= e($title) ?>"><meta property="og:description" content="<?= e($desc) ?>"><meta property="og:url" content="<?= e($canon) ?>"><meta property="og:site_name" content="<?= e(APP_NAME) ?>"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="<?= e($title) ?>"><meta name="twitter:description" content="<?= e($desc) ?>">
 <link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>"><link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>">
-<link rel="stylesheet" href="<?= e(asset('landing.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('landing.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('statusmark.css')) ?>"><meta name="pills-src" content="<?= e(asset('pills.svg')) ?>">
 <script type="application/ld+json"><?= json_encode(['@context' => 'https://schema.org', '@type' => 'SoftwareApplication', 'name' => APP_NAME, 'applicationCategory' => 'FinanceApplication', 'operatingSystem' => 'Web, Android, iOS', 'description' => $desc, 'url' => $canon, 'offers' => ['@type' => 'Offer', 'price' => '0', 'priceCurrency' => 'INR']], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script></head>
 <body class="lp">
 <a href="#main" class="lp-skip">Skip to content</a>
@@ -57,11 +57,11 @@ function page_welcome(): void {
   <div class="lp-grid"><?php foreach ($feat as [$ic, $h, $p]): ?><article class="lp-card"><span class="lp-card__ic"><?= icon($ic, 'size-5') ?></span><h3><?= e($h) ?></h3><p><?= e($p) ?></p></article><?php endforeach; ?></div></div></section>
 
 <section class="lp-sec lp-sec--alt" id="advisor"><div class="lp-wrap lp-split">
-  <div><p class="lp-eyebrow">The AI advisor</p><h2>Advice that does not flatter you</h2><p class="lp-lead">It reads your accounts, bills and goals, does the maths with real calculators (EMI, SIP, payoff, tax regimes), shows every step, and proposes changes you can preview, apply and undo.</p>
+  <div><span class="pills-mark lp-pills" data-pills data-size="96" data-label="The AI advisor"></span><p class="lp-eyebrow">The AI advisor</p><h2>Advice that does not flatter you</h2><p class="lp-lead">It reads your accounts, bills and goals, does the maths with real calculators (EMI, SIP, payoff, tax regimes), shows every step, and proposes changes you can preview, apply and undo.</p>
     <ul class="lp-list"><li><?= icon('check', 'size-4') ?> Blunt, numbers-first, no filler</li><li><?= icon('check', 'size-4') ?> Calculators with visible step-by-step working</li><li><?= icon('check', 'size-4') ?> Changes only after you press Apply, all logged with Undo</li><li><?= icon('check', 'size-4') ?> Refuses to help with tax evasion</li></ul></div>
   <div class="lp-dockwrap"><p class="lp-dockhint">Your favourite pages in a dock. Hover it.</p>
     <div class="mf-dock mf-dock--demo" data-dock data-base="50" data-magnify="70" data-panel="68" data-gap="10" data-round="0.5"><div class="mf-dock__panel" role="toolbar" aria-label="Dock preview">
-      <?php foreach ([['Dashboard', 'layout-dashboard', 1], ['Transactions', 'arrow-left-right', 0], ['Bills', 'bell-ring', 3], ['Goals', 'goal', 0], ['AI advisor', 'sparkles', 0], ['Reports', 'chart-line', 0]] as $i => [$l, $ic, $n]): ?>
+      <?php foreach ([['Dashboard', 'layout-dashboard', 1], ['Transactions', 'arrow-left-right', 0], ['Bills', 'bell-ring', 3], ['Goals', 'goal', 0], ['AI advisor', 'pills', 0], ['Reports', 'chart-line', 0]] as $i => [$l, $ic, $n]): ?>
         <a class="mf-dock__item<?= $i === 0 ? ' is-active' : '' ?>" href="#features" data-key="<?= $i ?>" aria-label="<?= e($l) ?>"><span class="mf-dock__tile"><?= icon($ic, 'mf-dock__icon') ?><?= $n ? '<span class="mf-dock__badge" aria-hidden="true">' . $n . '</span>' : '' ?></span><span class="mf-dock__label" aria-hidden="true"><?= e($l) ?></span><span class="mf-dock__dot" aria-hidden="true"></span></a><?php endforeach; ?>
     </div></div></div></div></section>
 
@@ -78,7 +78,7 @@ function page_welcome(): void {
 <section class="lp-cta"><div class="lp-wrap"><h2>Your money, finally in order.</h2><p class="lp-lead">Set up in a few minutes. Add sample data to look around first.</p><div class="lp-actions lp-actions--c"><?= $star($ctaLabel, $cta) ?></div></div></section>
 </main>
 <footer class="lp-foot"><div class="lp-wrap lp-foot__in"><span>© <?= date('Y') ?> <?= e(APP_NAME) ?></span><nav aria-label="Footer"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="<?= e(url('/login')) ?>">Sign in</a><a href="<?= e(url('/credits')) ?>">Credits</a></nav></div></footer>
-<script src="<?= e(asset('starborder.js')) ?>" defer></script><script src="<?= e(asset('swiperow.js')) ?>" defer></script><script src="<?= e(asset('dock.js')) ?>" defer></script>
+<script src="<?= e(asset('motion.js')) ?>"></script><script src="<?= e(asset('pillsmark.js')) ?>" defer></script><script src="<?= e(asset('starborder.js')) ?>" defer></script><script src="<?= e(asset('swiperow.js')) ?>" defer></script><script src="<?= e(asset('dock.js')) ?>" defer></script>
 <script>document.addEventListener('click',function(e){var b=e.target.closest('[data-demo-msg]');if(!b)return;var o=document.querySelector('[data-demo-out]');if(o){o.textContent='Demo: '+b.getAttribute('data-demo-msg')+'.';clearTimeout(o._t);o._t=setTimeout(function(){o.textContent=''},2600)}});
 if('IntersectionObserver'in window&&!matchMedia('(prefers-reduced-motion: reduce)').matches){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}})},{threshold:.12});document.querySelectorAll('.lp-card,.lp-tier,.lp-faq details').forEach(function(n){n.classList.add('lp-rv');io.observe(n)})}</script>
 </body></html>

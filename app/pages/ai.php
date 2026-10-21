@@ -50,7 +50,7 @@ function page_ai_actions(): void {
             $kv = fn($x) => implode(', ', array_map(fn($k, $v) => str_replace('_', ' ', $k) . ': ' . (is_scalar($v) ? (string) $v : json_encode($v)), array_keys($x), $x));
             echo '<li class="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div class="min-w-0 flex-1"><p class="font-medium">' . e($a['summary']) . '</p><p class="text-xs text-mute">' . e(ucfirst(str_replace('_', ' ', $a['kind']))) . ' · ' . e($a['created_at']) . ' UTC'
                 . ($a['undone_at'] ? ' · undone ' . e($a['undone_at']) : '') . '</p>' . ($b || $af ? '<details class="mt-1 text-xs text-mute"><summary class="cursor-pointer">Before / after</summary><p class="mt-1">Before: ' . e($kv($b) ?: '—') . '</p><p>Recorded: ' . e($kv($af) ?: '—') . '</p></details>' : '')
-                . ($a['error'] ? '<p class="mt-1 text-xs text-neg">' . e($a['error']) . '</p>' : '') . '</div><div class="flex items-center gap-2">' . badge(ucfirst($a['status']), $tone)
+                . ($a['error'] ? '<p class="mt-1 text-xs text-neg">' . e($a['error']) . '</p>' : '') . '</div><div class="flex items-center gap-2"><span data-status-mark data-status="' . ['applied' => 'done', 'undone' => 'cancelled', 'failed' => 'failed', 'dismissed' => 'cancelled'][$a['status']] . '" data-size="18" data-strike="0" aria-hidden="true"></span>' . badge(ucfirst($a['status']), $tone)
                 . ($a['status'] === 'applied' ? confirm_btn(icon('undo-2', 'size-4') . ' Undo', 'ai-undo', ['id' => $a['id']], 'Undo this change?', $a['summary'] . ' will be reversed exactly.', 'Undo', 'btn btn-sm') : '') . '</div></li>';
         }
         echo '</ul>';

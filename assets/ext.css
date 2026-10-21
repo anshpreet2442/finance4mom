@@ -144,3 +144,4 @@ html, body { overflow-x: clip; }
 dialog [data-topup-preset] { min-height: 40px; }
 @media print { body * { visibility: hidden; } #receipt, #receipt * { visibility: visible; } #receipt { position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; } }
 #wallet .btn, [data-open="#topup"] { min-height: 44px; }
+.ai-step__mark { margin-right: .35rem; flex: none; } .ai-calc li { display: flex; align-items: baseline; flex-wrap: wrap; }

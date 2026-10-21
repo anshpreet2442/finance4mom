@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 
 const EMAIL_EVENTS = [
-    'payment.received' => 'A due / charge was paid', 'bill.paid' => 'A bill payment was recorded', 'tx.payment' => 'A payment (expense) was recorded', 'test' => 'Test message',
+    'payment.received' => 'A due / charge was paid', 'bill.paid' => 'A bill payment was recorded', 'tx.payment' => 'A payment (expense) was recorded', 'shop.receipt' => 'A plugin or usage pack was bought', 'test' => 'Test message',
 ];
 const SMS_EVENTS = ['charge.new' => 'A new charge was posted', 'charge.overdue' => 'A charge is overdue', 'charge.link' => 'Payment link sent by admin', 'test' => 'Test message'];
 const TEMPLATE_VARS = ['name' => 'Recipient name', 'amount' => 'Amount, e.g. ₹1,250', 'title' => 'What it is for (bill / charge / payment)', 'bill' => 'Same as title', 'date' => 'Date of the payment', 'due_date' => 'Due date', 'account' => 'Account paid from', 'method' => 'How it was paid', 'link' => 'Link to open / pay', 'app' => 'App name'];
@@ -16,6 +16,7 @@ function default_email_template(string $event): array {
     return match ($event) {
         'payment.received' => ['Payment received: {title}', "Hi {name},\n\nWe received your payment of {amount} for {title} on {date}. Thank you!\n\nSee your dues: {link}\n\n— {app}"],
         'bill.paid' => ['Bill paid: {title} ({amount})', "Hi {name},\n\nYou recorded a payment of {amount} for {title} on {date}{account}.\n\nOpen {app}: {link}\n\n— {app}"],
+        'shop.receipt' => ['Receipt: {title} ({amount})', "Hi {name},\n\nThanks for your purchase: {title}, {amount}. Your receipt is saved under Plugins: {link}\n\n— {app}"],
         'tx.payment' => ['Payment recorded: {amount}', "Hi {name},\n\nA payment of {amount} ({title}) was recorded on {date}{account}.\n\nOpen {app}: {link}\n\n— {app}"],
         default => ['Test message from {app}', "Hi {name},\n\nThis is a test email from {app}. If you can read this, your email settings work.\n\n— {app}"],
     };

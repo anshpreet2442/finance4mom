@@ -74,5 +74,13 @@
       count: function () { return Object.keys(rows).length; },
     };
   }
-  w.StatusMark = { create: create, list: list };
+  /** Mounts every <span data-status-mark data-status="done" data-label="..." data-size="16" data-strike="0"> (server-rendered rows such as the AI actions log). */
+  function scan(root) {
+    (root || document).querySelectorAll('[data-status-mark]').forEach(function (n) {
+      if (n._sm) return; var m = create({ status: n.getAttribute('data-status') || 'pending', label: n.hasAttribute('data-label') ? n.getAttribute('data-label') : undefined, size: Number(n.getAttribute('data-size')) || 18, strike: n.getAttribute('data-strike') !== '0', doneColor: '', errorColor: '' });
+      n._sm = m; n.appendChild(m.el);
+    });
+  }
+  w.StatusMark = { create: create, list: list, scan: scan };
+  document.addEventListener('DOMContentLoaded', function () { scan(); }); document.addEventListener('mfnc:page', function () { scan(); }); if (document.readyState !== 'loading') scan();
 })(window);

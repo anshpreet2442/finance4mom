@@ -60,7 +60,7 @@
   };
   R.calc = function (b) {
     var w = el('details', 'ai-card ai-calc'); w.open = true; var sm = el('summary'); sm.appendChild(el('span', 'ai-card__t', 'How this was calculated: ' + b.title)); w.appendChild(sm); var ol = el('ol');
-    b.steps.forEach(function (s) { var li = el('li'); if (!s.value && !s.formula) li.className = 'sep'; li.appendChild(el('span', 'ai-step__l', s.label)); if (s.formula) li.appendChild(el('code', 'ai-step__f', s.formula)); if (s.value) li.appendChild(el('b', 'ai-step__v', s.value)); ol.appendChild(li); });
+    b.steps.forEach(function (s, idx) { var li = el('li'); if (!s.value && !s.formula) li.className = 'sep'; else if (window.StatusMark) { var mk = StatusMark.create({ status: 'running', size: 14, strike: false, doneColor: '', errorColor: '', className: 'ai-step__mark' }); li.appendChild(mk.el); setTimeout(function () { mk.update({ status: 'done' }); }, 120 + idx * 110); } li.appendChild(el('span', 'ai-step__l', s.label)); if (s.formula) li.appendChild(el('code', 'ai-step__f', s.formula)); if (s.value) li.appendChild(el('b', 'ai-step__v', s.value)); ol.appendChild(li); });
     w.appendChild(ol); if (b.result) { var r = el('div', 'ai-result'); r.appendChild(el('span', '', b.result.label)); r.appendChild(el('b', '', b.result.value)); w.appendChild(r); } return w;
   };
   function kv(o) { var keys = Object.keys(o || {}); return keys.length ? keys.map(function (k) { var v = o[k]; return k.replace(/_/g, ' ') + ': ' + (v == null ? '—' : (typeof v === 'number' ? money(v) : v)); }).join(' · ') : ''; }
