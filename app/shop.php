@@ -160,7 +160,7 @@ function shop_start_checkout(int $uid, string $key, string $mode, int $topupPais
 }
 /** Called from apply_charge_effects once a top-up that was started from the shop has been credited: finishes the purchase if the wallet now covers it. */
 function shop_complete_after_topup(int $uid, string $key, int $chargeId): void {
-    try { shop_buy($uid, $key, 'topup-' . $chargeId); } catch (UserError) { /* still short or no longer for sale: the credit simply stays in the wallet */ }
+    try { shop_buy($uid, $key, 'topup-charge-' . $chargeId); /* nonce must be >= 8 chars or shop_buy refuses it */ } catch (UserError) { /* still short or no longer for sale: the credit simply stays in the wallet */ }
 }
 /** A charge (card) that granted a feature or credited a pack gets a purchase record + receipt too. */
 function shop_record_charge(array $c): void {
