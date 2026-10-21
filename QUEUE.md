@@ -98,3 +98,4 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 ## G. Round 2 tester bugs
 - [x] (F4, fixed by tester) shop top-up never completed the purchase for charge ids 1-9 — shop_complete_after_topup() used nonce 'topup-<id>' (7 chars) but shop_buy() refuses nonces < 8 chars; the UserError was swallowed so the credit just sat in the wallet. Fixed in app/shop.php:163 (+ regression test in tests/run.php).
 - [x] (F4/F5, fixed by tester) admin-hidden plugin could still be bought by direct POST to the legacy /do/plan-buy route (created a charge; /do/shop-* refused it). do_plan_buy now checks shop_item()['hidden'] (app/actions_ext.php:101) + test.
+- [x] (F1, fixed by tester) PromptBar send glyph stuck as the Stop square when busy went true->false before the first animation frame (fast/instant error replies): morph() returned early without stopping the running morph (assets/promptbar.js morph()). Fixed: stop the animation when already at target.
