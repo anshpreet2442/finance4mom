@@ -1,13 +1,6 @@
 <?php
 declare(strict_types=1);
 
-function pct_change(int $now, int $prev): ?float { return $prev > 0 ? ($now - $prev) / $prev * 100 : null; }
-function change_chip(?float $c, bool $upIsGood = true): string {
-    if ($c === null) { return '<span class="text-xs text-mute">no earlier data</span>'; }
-    $good = ($c >= 0) === $upIsGood;
-    return '<span class="inline-flex items-center gap-1 text-xs ' . ($good ? 'text-lime-dk' : 'text-orange-dk') . '">' . icon($c >= 0 ? 'trending-up' : 'trending-down', 'size-3.5') . number_format(abs($c), 1) . '% <span class="text-mute">from last month</span></span>';
-}
-
 function page_dashboard(): void {
     $u = require_login(); $s = snap(); $ctx = lw_ctx($u, $s); $month = $ctx['month']; $d = $ctx['d'];
     $isEmpty = !$s['txs'] && !$s['goals'] && !$s['bills'];

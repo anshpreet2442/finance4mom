@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 /** Dashboard widget renderers (H1). Each returns the card HTML exactly as the original dashboard drew it; $variant selects optional alternatives. Generated from pages/dashboard.php, then edited by hand. */
+function pct_change(int $now, int $prev): ?float { return $prev > 0 ? ($now - $prev) / $prev * 100 : null; }
+function change_chip(?float $c, bool $upIsGood = true): string {
+    if ($c === null) { return '<span class="text-xs text-mute">no earlier data</span>'; }
+    $good = ($c >= 0) === $upIsGood;
+    return '<span class="inline-flex items-center gap-1 text-xs ' . ($good ? 'text-lime-dk' : 'text-orange-dk') . '">' . icon($c >= 0 ? 'trending-up' : 'trending-down', 'size-3.5') . number_format(abs($c), 1) . '% <span class="text-mute">from last month</span></span>';
+}
+
 
 function lw_w_balance(array $c): string {
     extract($c);  ob_start(); ?>

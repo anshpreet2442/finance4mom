@@ -30,3 +30,4 @@
 .lw-hc .card,.lw-hc .stat-tile{border:2px solid currentColor}
 .lw-big .btn,.lw-big .quick,.lw-big a.btn{min-height:52px;font-size:1.05rem}.lw-big .quick{width:64px;height:64px}
 .lw-big .stat-tile__value{font-size:1.9rem}
+.badge-beta{display:inline-flex;align-items:center;border-radius:999px;padding:.15rem .6rem;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink,#16211c);color:var(--card,#fff)}
