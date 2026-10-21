@@ -492,6 +492,7 @@ $AIM = $AIM ?? null; require __DIR__ . '/c_tests.php'; // Builder-C: layout, voi
 require __DIR__ . '/telegram_tests.php';
 require __DIR__ . '/import_tests.php'; // statement import (Builder-D)
 require __DIR__ . '/round4_tests.php'; // round 4 (builder-E): guard, fallbacks, JSON import, AI documents, UI
+require __DIR__ . '/round5_f_tests.php'; // round 5 (builder-F): rings, account menu + do not disturb, voice assistant, streaming
 
 echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
 exit($fail ? 1 : 0);

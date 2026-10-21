@@ -17,6 +17,12 @@ function ring_tone(float $real, bool $limit = false, float $warn = 85.0, float $
     if ($limit) { return $real > $bad ? 'bad' : ($real >= $warn ? 'warn' : 'ok'); }
     return $real >= 100 ? 'done' : 'ok';
 }
+/** A CSS colour that is safe to print into a style attribute: #hex, rgb()/hsl()/oklch(), var(--token) or a plain colour name; anything else is dropped. */
+function ring_color(string $c): string {
+    $c = trim($c); if ($c === '') { return ''; }
+    if (preg_match('/^#[0-9a-f]{3,8}$/i', $c) || preg_match('/^(?:rgb|rgba|hsl|hsla|oklch|oklab)\([#0-9a-z\s,.%\/-]{1,60}\)$/i', $c) || preg_match('/^var\(--[a-z0-9-]{1,30}\)$/i', $c) || preg_match('/^[a-z]{3,20}$/i', $c)) { return $c; }
+    return '';
+}
 const RING_SIZES = ['xs' => 40, 'sm' => 56, 'md' => 80, 'lg' => 120, 'xl' => 160];
 function ring(float $value, array $o = []): string {
     $o += ['min' => 0, 'max' => 100, 'limit' => false, 'warn' => 85, 'bad' => 100, 'label' => '', 'text' => null, 'sub' => '', 'format' => 'pct', 'size' => 'md', 'class' => '', 'tone' => 'auto', 'primary' => '', 'secondary' => '', 'variant' => 'track'];
@@ -25,8 +31,9 @@ function ring(float $value, array $o = []): string {
     $txt = $o['text'] !== null && $o['text'] !== '' ? (string) $o['text'] : ($o['format'] === 'none' ? '' : ($o['format'] === 'raw' ? (string) $m['whole'] : $m['whole'] . '%'));
     $vt = $m['real'] > 100 ? $m['whole'] . '% (over the limit by ' . ($m['whole'] - 100) . '%)' : $m['whole'] . '%';
     $style = '--p:' . round($m['visual'], 2) . ';--s:' . (round($m['visual']) <= 90 ? 90 - (int) round($m['visual']) : 0) . ($px !== 96 && !$cls ? ';--ring-size:' . $px . 'px' : '');
-    if ($o['primary'] !== '') { $style .= ';--ring-primary:' . preg_replace('/[^#a-zA-Z0-9(),.%\s\/-]/', '', (string) $o['primary']); }
-    if ($o['secondary'] !== '') { $style .= ';--ring-secondary:' . preg_replace('/[^#a-zA-Z0-9(),.%\s\/-]/', '', (string) $o['secondary']); }
+    $o['primary'] = ring_color((string) $o['primary']); $o['secondary'] = ring_color((string) $o['secondary']);
+    if ($o['primary'] !== '') { $style .= ';--ring-primary:' . $o['primary']; }
+    if ($o['secondary'] !== '') { $style .= ';--ring-secondary:' . $o['secondary']; }
     $attrs = ' data-ring data-value="' . e((string) round((float) $value, 2)) . '"' . ($o['min'] != 0 ? ' data-min="' . e((string) $o['min']) . '"' : '') . ($o['max'] != 100 ? ' data-max="' . e((string) $o['max']) . '"' : '')
         . ($o['limit'] ? ' data-limit="1"' . ($o['warn'] != 85 ? ' data-warn="' . (float) $o['warn'] . '"' : '') . ($o['bad'] != 100 ? ' data-bad="' . (float) $o['bad'] . '"' : '') : '')
         . ($o['tone'] !== 'auto' ? ' data-tone="' . e((string) $o['tone']) . '"' : '') . ($o['text'] !== null && $o['text'] !== '' ? ' data-text="' . e($txt) . '"' : '') . ($o['format'] !== 'pct' ? ' data-format="' . e((string) $o['format']) . '"' : '')
