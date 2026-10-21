@@ -13,8 +13,8 @@ Rule: edit only your own queue lines; append new items at the bottom of the righ
 - [x] A2 (builder) Inspect /admin/billing end to end (all actions, forms, empty/error states) and fix errors
 - [ ] A3 Sweep every page desktop + mobile for UI/UX bugs (overflow, empty space, tiny chart labels, a11y, focus, contrast, dark mode), fix them
 ## B. Features
-- [ ] B1 SwipeRow (vanilla JS port, assets/swiperow.js + css) on mobile list rows: transactions, bills, dues, goals, accounts. Delete/archive/pay actions via existing POST actions + CSRF
-- [ ] B2 Dock (vanilla JS port) desktop only, user pins pages, persisted per user; pin/unpin UI
+- [x] B1 (builder) SwipeRow (vanilla JS port, assets/swiperow.js + css) on mobile list rows: transactions, bills, dues, goals, accounts. Delete/archive/pay actions via existing POST actions + CSRF
+- [x] B2 (builder) Dock (vanilla JS port) desktop only, user pins pages, persisted per user; pin/unpin UI
 - [ ] B3 Email system: send email on new payment, admin toggle; SMTP settings in admin; templates
 - [ ] B4 Twilio SMS: admin toggle + credentials, payment-link alerts, editable default template with {parameters}
 - [ ] B5 Landing page (/ for guests, e.g. /welcome) using StarBorder (vanilla JS port) and other components
