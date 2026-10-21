@@ -137,7 +137,7 @@ function dock_manager(array $u): string {
  * Action: ['type' => 'post', 'label', 'icon', 'tone' => danger|ok|warn|dark|primary, 'action' => 'transaction-delete', 'fields' => [...], 'undo' => 'Transaction deleted'] or ['type' => 'open', 'open' => '#dialog-id', ...] or ['type' => 'link', 'href' => ...].
  */
 function swipe_row(string $content, array $start = [], array $end = [], string $label = '', array $opts = []): string {
-    $mk = function (array $a): string {
+    $mk = function (array $a) use ($label): string {
         $cls = 'swipe-act swipe-act--' . ($a['tone'] ?? 'dark'); $inner = icon($a['icon'] ?? 'ellipsis', 'size-5') . '<span>' . e($a['label'] ?? '') . '</span>';
         if (($a['type'] ?? 'post') === 'link') { return '<a class="' . $cls . '" href="' . e($a['href'] ?? '#') . '">' . $inner . '</a>'; }
         if (($a['type'] ?? 'post') === 'attr') { return '<button type="button" class="' . $cls . '" ' . $a['attrs'] . ' data-swipe-open>' . $inner . '</button>'; }

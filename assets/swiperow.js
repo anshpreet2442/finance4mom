@@ -63,7 +63,8 @@
       if (mode === 1) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; if (Math.abs(dy) > Math.abs(dx)) { mode = -1; return; } mode = 2; try { row._c.setPointerCapture(id); } catch (x) {} row.classList.add('is-dragging'); }
       if (mode !== 2) return; var dt = e.timeStamp - lt; if (dt > 0) v = (e.clientX - lx) / dt; lx = e.clientX; lt = e.timeStamp;
       var x = x0 + dx, max = row._sw, min = -row._ew; // rubber band past the ends (and where no actions exist)
-      if (x > max) x = max + (x - max) * res; else if (x < min) x = min + (x - min) * res;
+      var rs = full > 0 ? 0.8 : res; // with full-swipe on, the row follows the finger almost 1:1 past the buttons so the full-swipe distance is reachable
+      if (x > max) x = max + (x - max) * (max ? rs : res); else if (x < min) x = min + (x - min) * (row._ew ? rs : res);
       setX(row, x, false); if (e.cancelable) e.preventDefault();
     });
     function end(e) {
