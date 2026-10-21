@@ -22,7 +22,9 @@ function page_ai(): void {
     $rows = array_reverse(all('SELECT id,role,content FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT 60', [$uid])); $msgs = [];
     foreach ($rows as $r) { $c = json_decode($r['content'], true) ?: []; $msgs[] = $r['role'] === 'user' ? ['role' => 'user', 'text' => (string) ($c['text'] ?? '')] : ['role' => 'assistant', 'blocks' => $c['blocks'] ?? []]; }
     // previews that were already applied / dismissed elsewhere show their real state
-    foreach ($msgs as &$m) { foreach ($m['blocks'] ?? [] as &$b) { if (($b['type'] ?? '') === 'preview') { $b['status'] = (string) (val('SELECT status FROM {ai_actions} WHERE id=? AND user_id=?', [$b['action_id'], $uid]) ?? 'dismissed'); } } unset($b); } unset($m);
+    foreach ($msgs as $mi => $m) { foreach ($m['blocks'] ?? [] as $bi => $b) {   // (index based: iterating a `?? []` copy by reference would silently drop the change)
+        if (($b['type'] ?? '') === 'doc_estimate') { $msgs[$mi]['blocks'][$bi]['status'] = ai_docs_estimate_open($uid, $b) ? 'open' : 'closed'; }
+        if (($b['type'] ?? '') === 'preview') { $msgs[$mi]['blocks'][$bi]['status'] = (string) (val('SELECT status FROM {ai_actions} WHERE id=? AND user_id=?', [$b['action_id'], $uid]) ?? 'dismissed'); } } }
     $data = ['messages' => $msgs, 'stage' => $profile['stage'], 'agent' => ['name' => $profile['agent_name'], 'avatar' => ai_avatar_url($profile)], 'endpoints' => ['chat' => url('/ai/chat'), 'act' => url('/ai/act'), 'upload' => url('/ai/upload'), 'upload_b64' => url('/ai/upload/b64'), 'shop' => url('/plugins')], 'models' => ai_model_options($u), 'defaultModel' => ai_pick_model($u, ''), 'efforts' => array_keys(ai_efforts_cfg()), 'defaultEffort' => 'Medium',
         'commands' => array_values(array_map(fn($c) => ['key' => $c['key'], 'name' => $c['name'], 'description' => $c['description']], ai_commands($u))), 'scopes' => array_keys(AI_SCOPES), 'web' => site_setting('ai_web_search', '0') === '1', 'upload' => ai_upload_limits(), 'csrf' => csrf_token(), 'user' => explode(' ', $u['name'])[0],
         'suggestions' => ['How am I doing this month?', 'Where does my money go?', 'Compare old vs new tax regime', 'What would a ₹10 lakh loan at 9% cost me?', 'Which of my goals is behind?', 'Which bills are due?']];
@@ -97,7 +99,7 @@ function handle_ai_chat(): never {
     while (ob_get_level() > 0) { ob_end_flush(); }
     $emit = function (array $ev) { echo json_encode($ev, JSON_UNESCAPED_UNICODE) . "\n"; echo str_repeat(' ', 0); flush(); };
     $o = ['model' => is_string($body['model'] ?? null) ? mb_substr($body['model'], 0, 60) : '', 'effort' => is_string($body['effort'] ?? null) ? mb_substr($body['effort'], 0, 12) : '', 'files' => is_array($body['files'] ?? null) ? array_slice($body['files'], 0, 8) : [],
-        'sources' => is_array($body['sources'] ?? null) ? array_slice(array_filter($body['sources'], 'is_string'), 0, 8) : [], 'web' => !empty($body['web'])];
+        'sources' => is_array($body['sources'] ?? null) ? array_slice(array_filter($body['sources'], 'is_string'), 0, 8) : [], 'web' => !empty($body['web']), 'docs_ok' => !empty($body['docs_ok'])];
     try { ai_turn($u, (string) ($body['message'] ?? ''), $emit, $o); }
     catch (UserError $e) { $emit(['type' => 'error', 'code' => 'error', 'message' => $e->getMessage()]); }
     catch (Throwable $e) { log_error($e); $emit(['type' => 'error', 'code' => 'error', 'message' => 'Something went wrong. Please try again.']); }
@@ -106,6 +108,7 @@ function handle_ai_chat(): never {
 function handle_ai_act(): never {
     [$u, $body] = ai_json_guard(); $uid = (int) $u['id']; $id = (int) ($body['id'] ?? 0); $op = (string) ($body['op'] ?? '');
     try {
+        if ($op === 'docs_cancel') { $ids = array_map('intval', array_filter((array) ($body['files'] ?? []), 'is_scalar')); ai_upload_discard(ai_load_uploads($uid, array_slice($ids, 0, AI_UPLOAD_PER_MESSAGE))); echo json_encode(['type' => 'ok', 'message' => 'Cancelled. Nothing was read and you were not charged.', 'status' => 'cancelled']) . "\n"; exit; }
         if (!feature_on($u, 'ai')) { throw new UserError(feature_access($u, 'ai')['reason']); }
         $msg = match ($op) { 'apply' => ai_apply($uid, $id), 'dismiss' => (function () use ($uid, $id) { ai_dismiss($uid, $id); return 'Dismissed.'; })(), 'undo' => ai_undo($uid, $id), default => throw new UserError('Unknown request.') };
         echo json_encode(['type' => 'ok', 'message' => $msg, 'status' => (string) val('SELECT status FROM {ai_actions} WHERE id=?', [$id])]) . "\n";

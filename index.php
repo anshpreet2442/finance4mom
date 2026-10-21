@@ -99,7 +99,7 @@ $routes = [
     '/manifest.webmanifest' => 'page_manifest', '/api/pulse' => 'page_pulse', '/sw.js' => 'page_sw', '/offline' => 'page_offline', '/credits' => 'page_credits',
     '/reports' => 'page_reports', '/settings' => 'page_settings', '/settings/backup' => 'page_backup',
     '/ai' => 'page_ai', '/ai/actions' => 'page_ai_actions', '/ai/settings' => 'page_ai_settings', '/ai/avatar' => 'page_ai_avatar', '/plans' => 'page_plans', '/plugins' => 'page_plugins', '/plugins/receipt' => 'page_plugin_receipt', '/admin/plugins' => 'page_admin_plugins', '/welcome' => 'page_welcome',
-    '/admin/telegram' => 'page_admin_telegram', '/api/telegram' => 'page_api_telegram', '/admin/features' => 'page_admin_features', '/admin/ai' => 'page_admin_ai', '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
+    '/admin/telegram' => 'page_admin_telegram', '/api/telegram' => 'page_api_telegram', '/admin/features' => 'page_admin_features', '/admin/ai' => 'page_admin_ai', '/admin/documents' => 'page_admin_documents', '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
     '/admin' => 'page_admin', '/admin/users' => 'page_admin_users', '/admin/settings' => 'page_admin_settings', '/admin/activity' => 'page_admin_activity', '/admin/system' => 'page_admin_system',
 ];
 if (!in_array(method(), ['GET', 'HEAD'], true)) { http_response_code(405); exit; }

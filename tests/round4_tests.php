@@ -180,3 +180,4 @@ r4_stop($waf, $wafPort);
 // the rate limit for the rows path
 $rl = $R4('r4rate@x.test'); $limit = null; for ($i = 0; $i < 14; $i++) { try { import_handle_workbook($rl, import_rows_to_workbook($cj), 'r.xlsx', true); } catch (UserError $e) { $limit = $i; break; } } eq($limit, 12, 'client-parsed rows share the 12-per-hour upload limit');
 require __DIR__ . '/round4_json_tests.php';
+require __DIR__ . '/round4_docs_tests.php';

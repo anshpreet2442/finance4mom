@@ -84,6 +84,11 @@ function ai_validate_request(array $body): ?string {
             if (isset($t->description) && !is_string($t->description)) { return "tools.$i.custom.description: Input should be a valid string"; }
         }
     }
+    if (isset($w->tool_choice)) {
+        $tc = $w->tool_choice; if (!is_object($tc) || !in_array($tc->type ?? '', ['auto', 'any', 'tool', 'none'], true)) { return 'tool_choice.type: Input should be \'auto\', \'any\', \'tool\' or \'none\''; }
+        if ($tc->type === 'tool' && (!is_string($tc->name ?? null) || !isset($toolNames[$tc->name]))) { return 'tool_choice.tool.name: Tool \'' . (is_string($tc->name ?? null) ? $tc->name : '') . '\' not found in provided tools'; }
+        if (in_array($tc->type, ['any', 'tool'], true) && isset($w->thinking) && ($w->thinking->type ?? '') !== 'disabled') { return 'tool_choice: Thinking may not be enabled when tool_choice forces tool use.'; }
+    }
     // ---- messages ----
     if (!isset($w->messages) || !is_array($w->messages) || !$w->messages) { return 'messages: List should have at least 1 item after validation, not 0'; }
     $prev = null; $pending = []; $seenIds = [];

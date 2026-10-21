@@ -586,7 +586,7 @@ function import_json_checks_html(array $stmt, array $plan, string $token): strin
     }
     if ($info) { $o .= '<ul class="imp-infos">' . implode('', array_map(fn($x) => '<li>' . icon('info', 'size-4') . ' ' . e($x['msg']) . '</li>', array_slice($info, 0, 8))) . '</ul>'; }
     $report = import_json_report($stmt);
-    $o .= '<div class="imp-actions imp-actions--wrap"><button type="button" class="btn" data-imp-copyreport>' . icon('copy', 'size-4') . ' Copy report for my AI</button><a class="btn btn-ghost" href="' . e(url('/import', ['tab' => 'json'])) . '#json">' . icon('refresh-cw', 'size-4') . ' Paste a corrected JSON</a></div>'
+    $o .= '<div class="imp-actions imp-actions--wrap"><button type="button" class="btn" data-imp-copyreport>' . icon('copy', 'size-4') . ' Copy report for my AI</button><a class="btn btn-ghost" href="' . e(url('/import', ['tab' => 'json'])) . '#json">' . icon('rotate-cw', 'size-4') . ' Paste a corrected JSON</a></div>'
         . '<textarea class="sr-only" data-imp-report readonly tabindex="-1" aria-hidden="true">' . e($report) . '</textarea><p class="imp-copied" data-imp-copied role="status" hidden>Copied. Paste it into the same chat where the AI wrote the JSON and ask for the corrected JSON.</p>';
     if (!empty($j['doc_notes'])) { $o .= '<p class="imp-p imp-note2"><b>Note in the file:</b> ' . e($j['doc_notes']) . '</p>'; }
     return $o . '</section>';

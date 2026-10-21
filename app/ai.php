@@ -270,6 +270,7 @@ function ai_apply(int $uid, int $id): string {
                 case 'add_goal': $gid = save_goal($uid, null, ['kind' => 'long-term', 'name' => $p['name'], 'target_amount' => $p['target_amount'], 'target_date' => $p['target_date'], 'priority' => 'medium', 'monthly_target' => $p['monthly_target'] ?? 0, 'monthly_limit' => 0, 'notes' => 'Added by advisor']); $after = ['goal_id' => $gid]; break;
                 case 'pay_bill': pay_occurrence($uid, (int) $p['occurrence_id'], (int) $p['amount'], $p['date'], (int) $p['account_id'], false); $tid = (int) val('SELECT MAX(id) FROM {transactions} WHERE user_id=? AND occurrence_id=?', [$uid, $p['occurrence_id']]); $after = ['transaction_id' => $tid]; break;
                 case 'contribute_goal': $cid = add_contribution($uid, 'goal', (int) $p['goal_id'], (int) $p['amount'], $p['date'], $p['account_id'] ?: null, 'Added by advisor'); $after = ['contribution_id' => $cid]; break;
+                case 'create_transactions': case 'add_bills': $after = ai_docs_apply($uid, $a['kind'], $p); break;   // read from a document (ai_docs.php): many rows, one undo
                 default: throw new UserError('Unknown action.');
             }
         });
@@ -288,6 +289,7 @@ function ai_undo(int $uid, int $id): string {
             case 'set_budget': $old = $before['budget'] ?? null; set_budget($uid, (int) $p['category_id'], $old === null ? 0 : (int) round($old * 100)); break;
             case 'add_goal': if (!empty($after['goal_id']) && one('SELECT id FROM {goals} WHERE id=? AND user_id=?', [$after['goal_id'], $uid])) {
                 if ((int) val("SELECT COUNT(*) FROM {contributions} WHERE user_id=? AND target_type='goal' AND target_id=?", [$uid, $after['goal_id']]) > 0) { throw new UserError('Money was added to this goal after it was created. Remove those entries first, then undo.'); } delete_goal($uid, (int) $after['goal_id']); } break;
+            case 'create_transactions': case 'add_bills': ai_docs_undo($uid, $a['kind'], $after); break;
             case 'contribute_goal': if (!empty($after['contribution_id']) && one('SELECT id FROM {contributions} WHERE id=? AND user_id=?', [$after['contribution_id'], $uid])) { delete_contribution($uid, (int) $after['contribution_id']); } break;
         }
         run("UPDATE {ai_actions} SET status='undone', undone_at=UTC_TIMESTAMP() WHERE id=?", [$a['id']]);

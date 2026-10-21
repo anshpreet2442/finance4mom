@@ -34,6 +34,7 @@ function ai_http(array $body): array {
 /** A scripted stand-in for the Messages API (MFNC_AI_MOCK=1). Deterministic: keywords in the last user message pick a tool path. */
 function ai_mock_call(array $body): array {
     ai_mock_guard($body);   // fail like the real API when the request is malformed
+    if (($body['tools'][0]['name'] ?? '') === 'submit_extraction' && function_exists('ai_docs_mock_call')) { return ai_docs_mock_call($body); }   // document reading (ai_docs.php)
     $msgs = $body['messages']; $last = end($msgs); $plain = ''; $rounds = 0; $results = [];
     $files = 0; for ($i = count($msgs) - 1; $i >= 0; $i--) { $m = $msgs[$i]; if ($m['role'] === 'user' && is_array($m['content']) && !array_filter($m['content'], fn($b) => ($b['type'] ?? '') === 'tool_result')) { foreach ($m['content'] as $b) { if (in_array($b['type'] ?? '', ['image', 'document'], true)) { $files++; } if (($b['type'] ?? '') === 'text') { $plain .= $b['text'] . "\n"; } } break; } if ($m['role'] === 'user' && is_string($m['content'])) { $plain = $m['content']; break; } if ($m['role'] === 'user' && is_array($m['content'])) { $rounds++; foreach ($m['content'] as $b) { if (($b['type'] ?? '') === 'tool_result') { $results[] = json_decode((string) $b['content'], true); } } } }
     $t = mb_strtolower($plain); $tu = fn($name, $in) => ['type' => 'tool_use', 'id' => 'toolu_' . bin2hex(random_bytes(6)), 'name' => $name, 'input' => $in];
@@ -91,7 +92,7 @@ function ai_history(int $uid, int $limit = 16): array {
     $rows = array_reverse(all('SELECT role,content FROM {ai_messages} WHERE user_id=? ORDER BY id DESC LIMIT ' . (int) $limit, [$uid])); $out = [];
     foreach ($rows as $r) {
         $c = json_decode($r['content'], true) ?: [];
-        if ($r['role'] === 'user') { $txt = (string) ($c['text'] ?? ''); } else { $parts = []; foreach ($c['blocks'] ?? [] as $b) { $parts[] = match ($b['type'] ?? '') { 'text' => $b['text'], 'callout' => $b['text'], 'preview' => '[showed a preview: ' . $b['title'] . ' - ' . $b['status'] . ']', 'name_prompt' => '', default => '[showed a ' . ($b['type'] ?? 'component') . (!empty($b['title']) ? ': ' . $b['title'] : '') . ']' }; } $txt = trim(implode("\n", array_filter($parts))); }
+        if ($r['role'] === 'user') { $txt = (string) ($c['text'] ?? ''); } else { $parts = []; foreach ($c['blocks'] ?? [] as $b) { $parts[] = match ($b['type'] ?? '') { 'text' => $b['text'], 'callout' => $b['text'], 'preview' => '[showed a preview: ' . $b['title'] . ' - ' . $b['status'] . ']', 'doc_result' => '[read the document "' . ($b['name'] ?? '') . '": ' . (int) ($b['rows'] ?? 0) . ' transactions found, ' . (int) ($b['dups'] ?? 0) . ' already in the ledger, ' . (int) ($b['pages_read'] ?? 0) . ' page(s) read]', 'doc_estimate' => '[asked the person to confirm reading a document]', 'name_prompt' => '', default => '[showed a ' . ($b['type'] ?? 'component') . (!empty($b['title']) ? ': ' . $b['title'] : '') . ']' }; } $txt = trim(implode("\n", array_filter($parts))); }
         if ($txt === '') { continue; } if ($out && $out[count($out) - 1]['role'] === $r['role']) { $out[count($out) - 1]['content'] .= "\n" . $txt; } else { $out[] = ['role' => $r['role'], 'content' => $txt]; }
     }
     while ($out && $out[0]['role'] !== 'user') { array_shift($out); }
@@ -144,6 +145,7 @@ function ai_turn(array $u, string $text, callable $emit, array $opts = []): void
     try { $model = ai_pick_model($u, (string) ($opts['model'] ?? '')); } catch (UserError $e) { $emit(['type' => 'error', 'code' => 'model', 'message' => $e->getMessage()]); return; }
     $mcfg = ai_models_cfg()[$model] ?? ai_model_defaults($model); $effort = isset(ai_efforts_cfg()[(string) ($opts['effort'] ?? '')]) ? (string) $opts['effort'] : 'Medium';
     try { $files = ai_load_uploads($uid, (array) ($opts['files'] ?? [])); } catch (UserError $e) { $emit(['type' => 'error', 'code' => 'files', 'message' => $e->getMessage()]); return; }
+    if ($files && function_exists('ai_docs_turn') && ai_docs_turn($u, $profile, $text, $files, $opts, $emit, $model)) { return; }   // photos / PDFs: estimate, read, propose (ai_docs.php)
     $hint = ''; if (preg_match('/^\/([a-z][a-z0-9_-]{1,15})(\s|$)/', $text, $cm) && ($cmd = ai_commands($u)[$cm[1]] ?? null)) { $hint .= 'The person used the /' . $cmd['key'] . ' command. ' . $cmd['prompt'] . "\n"; }
     $scopes = array_values(array_intersect(array_map('strval', (array) ($opts['sources'] ?? [])), array_keys(AI_SCOPES))); if ($scopes) { $hint .= 'The person wants you to focus on their ' . implode(', ', $scopes) . ': read those with the tools first.' . "\n"; }
     ai_save_message($uid, 'user', ['text' => $text] + ($files ? ['files' => array_column($files, 'name')] : []));

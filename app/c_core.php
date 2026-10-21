@@ -30,6 +30,12 @@ function c_schema(): array {
         UNIQUE KEY uq_vr_ref (ref), INDEX idx_vr (status, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
     'c_voice_usage' => "CREATE TABLE IF NOT EXISTS {c_voice_usage} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, kind ENUM('tts','stt') NOT NULL, chars INT UNSIGNED NOT NULL DEFAULT 0, seconds INT UNSIGNED NOT NULL DEFAULT 0, cost_micro BIGINT NOT NULL DEFAULT 0,
         provider VARCHAR(16) NOT NULL DEFAULT 'elevenlabs', source VARCHAR(16) NOT NULL DEFAULT 'web', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_vu (user_id, created_at), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
+    'c_doc_usage' => "CREATE TABLE IF NOT EXISTS {c_doc_usage} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, doc_id CHAR(16) NOT NULL, kind ENUM('pdf','image') NOT NULL, pages SMALLINT UNSIGNED NOT NULL DEFAULT 1, pages_read SMALLINT UNSIGNED NOT NULL DEFAULT 0, model VARCHAR(60) NOT NULL,
+        input_tokens INT UNSIGNED NOT NULL DEFAULT 0, output_tokens INT UNSIGNED NOT NULL DEFAULT 0, calls SMALLINT UNSIGNED NOT NULL DEFAULT 0, token_cost_micro BIGINT NOT NULL DEFAULT 0, fee_micro BIGINT NOT NULL DEFAULT 0, charged_micro BIGINT NOT NULL DEFAULT 0, rows_found SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        source ENUM('wallet','budget','mock') NOT NULL DEFAULT 'budget', status ENUM('ok','partial','failed','refused') NOT NULL DEFAULT 'ok', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_du_user (user_id, created_at), INDEX idx_du_time (created_at), INDEX idx_du_doc (doc_id),
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE) $t",
+    'c_doc_calls' => "CREATE TABLE IF NOT EXISTS {c_doc_calls} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, usage_id INT UNSIGNED NOT NULL, page_from SMALLINT UNSIGNED NOT NULL, page_to SMALLINT UNSIGNED NOT NULL, input_tokens INT UNSIGNED NOT NULL DEFAULT 0, output_tokens INT UNSIGNED NOT NULL DEFAULT 0, cost_micro BIGINT NOT NULL DEFAULT 0,
+        INDEX idx_dc_usage (usage_id), FOREIGN KEY (usage_id) REFERENCES {c_doc_usage}(id) ON DELETE CASCADE) $t",
     'c_pay_tpl' => "CREATE TABLE IF NOT EXISTS {c_pay_tpl} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, html MEDIUMTEXT NOT NULL, note VARCHAR(120) NOT NULL DEFAULT '', created_by INT UNSIGNED NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) $t",
     ];
 }
