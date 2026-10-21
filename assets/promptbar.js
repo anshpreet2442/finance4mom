@@ -86,7 +86,7 @@
       glyph.style.transform = goo ? 'rotate(' + (dir * o.tilt * goo) + 'deg) scale(' + sx + ', ' + (1 / sx) + ')' : '';
     });
     glyphPath.setAttribute('d', pathAt(ARROW_UP, SQUARE, t.get()));
-    function morph() { var target = st.busy ? 1 : 0; dir = st.busy ? 1 : -1; if (t.get() === target) return; if (reduce()) { t.jump(target); return; } M.animate(t, target, { duration: o.morphDuration / 1000, ease: EASE_IN_OUT }); }
+    function morph() { var target = st.busy ? 1 : 0; dir = st.busy ? 1 : -1; if (t.get() === target) { t.stop(); return; } if (reduce()) { t.jump(target); return; } M.animate(t, target, { duration: o.morphDuration / 1000, ease: EASE_IN_OUT }); }
 
     // ---------- sparks (only at max effort) ----------
     var spark = { raf: 0, ro: null, on: false };
