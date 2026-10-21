@@ -83,7 +83,7 @@
   // ---------- preview ----------
   function preview() {
     var form = $('form.imp-form'); if (!form || form._imp) return; form._imp = 1;
-    var rows = $$('.imp-row', form), edits = $('[data-imp-rowedits]', form), rowCat = {}, exclude = {};
+    var rows = $$('.imp-row', form), edits = $('[data-imp-rowedits]', form), rowCat = {}, exclude = {}, fixes = {};
     var tagSel = $$('[data-imp-cat]', form), accSel = $$('[data-imp-acc]', form);
     var q = $('[data-imp-q]', form), fdir = $('[data-imp-fdir]', form), fshow = $('[data-imp-fshow]', form), facc = $('[data-imp-facc]', form), shown = $('[data-imp-shown]', form);
 
@@ -93,7 +93,7 @@
     function totals() {
       var n = 0, off = 0, sum = 0;
       rows.forEach(function (r) { var dup = r.getAttribute('data-dup') === '1', on = included(r); r.classList.toggle('is-off', !on && !dup); if (on) { n++; sum += (r.getAttribute('data-dir') === 'in' ? 1 : -1) * +r.getAttribute('data-amt'); } else if (!dup) off++; });
-      var nEl = $('[data-imp-n]', form), go = $('[data-imp-golabel]', form), ex = $('[data-imp-extra]', form), top = $('#imp-ready-top');
+      var nEl = $('[data-imp-n]', form), go = $('[data-imp-golabel]', form), ex = $('[data-imp-extra]', form), top = $('#imp-ready-top'), rsum = d.getElementById('imp-ready-sum'); if (rsum) rsum.textContent = n;
       if (nEl) nEl.textContent = n; if (top) top.textContent = n;
       if (go) go.textContent = n ? 'Import ' + n + ' transaction' + (n === 1 ? '' : 's') : 'Nothing selected';
       if (ex) ex.textContent = (off ? off + ' left out · ' : '') + 'net ' + (sum < 0 ? '−' : '+') + money(Math.abs(sum));
@@ -138,6 +138,18 @@
         sel.className = 'input imp-catpick'; sel.setAttribute('aria-label', 'Category'); sel.innerHTML = src.innerHTML;
         sel.value = (n in rowCat) ? rowCat[n] : '__map'; cb.parentNode.replaceChild(sel, cb); sel.focus(); return;
       }
+      var fb = t.closest && t.closest('[data-imp-fix]');
+      if (fb) {   // one-click fixes from the checks (JSON import): skip / keep anyway / treat as the other direction / swap day and month / leave uncategorised
+        var fn = fb.getAttribute('data-n'), act = fb.getAttribute('data-imp-fix'), row = form.querySelector('.imp-row[data-n="' + fn + '"]'), cb = row && $('[data-imp-inc]', row), on = fb.getAttribute('aria-pressed') !== 'true';
+        $$('[data-imp-fix][data-n="' + fn + '"]').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); x.classList.remove('is-on'); });
+        if (on) { fb.setAttribute('aria-pressed', 'true'); fb.classList.add('is-on'); fixes[fn] = act; } else { delete fixes[fn]; }
+        if (cb) {
+          if (on && act === 'skip') { cb.checked = false; exclude[fn] = 1; }
+          else if (on && act === 'keep') { cb.disabled = false; cb.checked = true; delete exclude[fn]; }
+          else { cb.disabled = row.getAttribute('data-blocked') === '1' || row.getAttribute('data-dup') === '1'; cb.checked = !cb.disabled; if (cb.checked) delete exclude[fn]; }
+        }
+        totals(); if (fshow && fshow.value) applyFilter(); return;
+      }
       var rm = t.closest && t.closest('[data-imp-remark]');
       if (rm) { var inp = $('.imp-rem', rm.parentNode); rm.hidden = true; inp.hidden = false; inp.focus(); return; }
       if (t.closest && t.closest('[data-imp-all],[data-imp-none]')) {
@@ -147,7 +159,7 @@
     form.addEventListener('submit', function (e) {
       var b = $('[data-imp-go]', form);
       if (form._sent) { e.preventDefault(); return; }
-      var ed = { ex: [], cat: {}, rm: {} };
+      var ed = { ex: [], cat: {}, rm: {}, fx: fixes };
       Object.keys(exclude).forEach(function (n) { ed.ex.push(+n); });
       Object.keys(rowCat).forEach(function (n) { var v = rowCat[n]; ed.cat[n] = v === '' ? 'none' : (/^\d+$/.test(v) ? +v : v); });
       rows.forEach(function (r) { var i = $('.imp-rem', r); if (i && i.value.trim() !== i.getAttribute('data-orig')) ed.rm[r.getAttribute('data-n')] = i.value.trim(); });

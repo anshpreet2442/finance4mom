@@ -50,9 +50,10 @@ function import_page_done(array $u, array $s, int $id): void {
         . '<div><dt>Source</dt><dd>' . import_badge(['source' => $im['source']], 'src', true) . '</dd></div><div><dt>File</dt><dd>' . e($im['filename']) . '</dd></div>'
         . '<div><dt>Skipped as already imported</dt><dd>' . (int) $im['rows_skipped'] . '</dd></div>' . (!empty($sm['excluded']) ? '<div><dt>Left out by you</dt><dd>' . (int) $sm['excluded'] . '</dd></div>' : '')
         . (!empty($sm['accounts_created']) ? '<div><dt>New accounts</dt><dd>' . (int) $sm['accounts_created'] . '</dd></div>' : '') . (!empty($sm['categories_created']) ? '<div><dt>New categories</dt><dd>' . (int) $sm['categories_created'] . '</dd></div>' : '')
+        . (!empty($sm['x_bills']) ? '<div><dt>Bills added</dt><dd>' . count($sm['x_bills']) . '</dd></div>' : '') . (!empty($sm['x_goals']) ? '<div><dt>Goals added</dt><dd>' . count($sm['x_goals']) . '</dd></div>' : '') . (!empty($sm['x_budgets']) ? '<div><dt>Budgets set</dt><dd>' . count($sm['x_budgets']) . '</dd></div>' : '')
         . (!empty($sm['from']) ? '<div><dt>Dates</dt><dd>' . e(date_label($sm['from'])) . ' to ' . e(date_label($sm['to'])) . '</dd></div>' : '')
         . '<div><dt>Balances</dt><dd>' . (($sm['mode'] ?? 'keep') === 'keep' ? 'Unchanged (a balance correction keeps today\'s balance as it was)' : 'Updated by these transactions') . '</dd></div></dl><div class="imp-actions">'
-        . ($im['status'] === 'done' ? btn('See these transactions', url('/transactions', ['import' => $im['id']]), 'btn btn-primary', 'search') : '') . btn('Import another', url('/import'), 'btn', 'upload') . btn('Dashboard', url('/'), 'btn btn-ghost') . '</div></section>';
+        . ($im['status'] === 'done' && (int) $im['rows_imported'] > 0 ? btn('See these transactions', url('/transactions', ['import' => $im['id']]), 'btn btn-primary', 'search') : '') . btn('Import another', url('/import'), 'btn', 'upload') . btn('Dashboard', url('/'), 'btn btn-ghost') . '</div></section>';
     layout_end();
 }
 

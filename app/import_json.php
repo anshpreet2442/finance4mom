@@ -17,7 +17,7 @@ const IMPORT_JSON_PROMPT_VERSION = 1;
 const IMPORT_JSON_MAX_BYTES = 4 * 1048576;
 const IMPORT_JSON_MAX_ROWS = 5000;
 const IMPORT_JSON_MAX_DEPTH = 10;
-const IMPORT_JSON_MAX_MONEY = 100000000000;   // 10 crore rupees in paise... (1e9 rupees = 1e11 paise is the hard ceiling)
+const IMPORT_JSON_MAX_MONEY = 100000000000;   // 1e11 paise = ₹100 crore: anything above is not a household amount
 const IMPORT_JSON_TYPES = ['income', 'expense', 'transfer', 'refund'];
 const IMPORT_JSON_ALIASES = [
     'transactiondate' => 'date', 'txndate' => 'date', 'valuedate' => 'date', 'posteddate' => 'date', 'bookingdate' => 'date', 'datetime' => 'date', 'timestamp' => 'date',
@@ -195,7 +195,7 @@ function imj_money(string $v, string $dec = '', string $thou = ''): ?array {
     }
     $gs = $dec === ',' ? ['.', "'"] : [',', "'"]; if ($thou !== '' && $thou !== $dec) { $gs[] = $thou; }
     $s = str_replace($gs, '', $s); if ($dec === ',') { $s = str_replace(',', '.', $s); }
-    if (!preg_match('/^(\d{1,13})(?:\.(\d*))?$/', $s, $m)) { return null; }
+    if (!preg_match('/^(\d{1,15})(?:\.(\d*))?$/', $s, $m)) { return null; }
     $frac = $m[2] ?? ''; $minor = (int) $m[1] * 100 + (int) str_pad(substr($frac, 0, 2), 2, '0');
     if (strlen($frac) > 2 && $frac[2] >= '5') { $minor++; }   // half-up on the third digit
     return ['minor' => $minor, 'neg' => $neg, 'crdr' => $crdr, 'decimals' => strlen(rtrim($frac, '0')), 'raw_decimals' => strlen($frac)];
@@ -319,7 +319,7 @@ function import_json_build(array $doc, array $notes, array $ctx, string $filenam
     foreach ($tx as $i => $raw) {
         $n = $i + 1;
         if (!is_array($raw) || ($raw && array_is_list($raw))) { $iss('shape', 'error', $n, '', 'This entry is not an object ({ … }); skipped.'); continue; }
-        [$f, $extra] = imj_canon_row($raw); $blocked = false; $rowIssues = []; $err = function (string $code, string $field, string $msg, array $fix = []) use (&$blocked, &$rowIssues, $iss, $n) { $blocked = true; $rowIssues[] = $code; $iss($code, 'error', $n, $field, $msg, $fix); };
+        [$f, $extra] = imj_canon_row($raw); $blocked = false; $hard = false; $rowIssues = []; $err = function (string $code, string $field, string $msg, array $fix = [], bool $soft = false) use (&$blocked, &$hard, &$rowIssues, $iss, $n) { $blocked = true; if (!$soft) { $hard = true; } $rowIssues[] = $code; $iss($code, 'error', $n, $field, $msg, $fix); };   // soft errors (duplicates) can be overridden with "keep"; hard ones need a fixed file
         $warn = function (string $code, string $field, string $msg, array $fix = []) use (&$rowIssues, $iss, $n) { $rowIssues[] = $code; $iss($code, 'warning', $n, $field, $msg, $fix); };
         $S = fn(string $k, int $max = 200) => imj_txt($f[$k] ?? '', $max);
         // money
@@ -409,15 +409,15 @@ function import_json_build(array $doc, array $notes, array $ctx, string $filenam
         $date = $dt['date'] ?? ''; $accKey = imj_norm_name($account);
         $hash = 'h:' . substr(sha1(implode('|', [$date, $time ?? '', (string) $kind, $minor, $payee, $desc, $accKey, imj_norm_name($to)])), 0, 32);
         $base = $ext !== '' ? $ext : ($ref !== '' ? $ref : $hash); $ck = mb_strtolower($base . '|' . $accKey); $cnt[$ck] = ($cnt[$ck] ?? 0) + 1;
-        if ($cnt[$ck] > 1) { $dupN = $cnt[$ck]; if ($ext !== '' || $ref !== '') { $first = $seenRef[$ck]; $err('dup_ref', 'ref', 'Same reference "' . $base . '" as row ' . $first . ' (same account): probably the same transaction listed twice.', [['a' => 'keep', 'l' => 'Not a duplicate: keep it'], ['a' => 'skip', 'l' => 'Skip']]); }
+        if ($cnt[$ck] > 1) { $dupN = $cnt[$ck]; if ($ext !== '' || $ref !== '') { $first = $seenRef[$ck]; $err('dup_ref', 'ref', 'Same reference "' . $base . '" as row ' . $first . ' (same account): probably the same transaction listed twice.', [['a' => 'keep', 'l' => 'Not a duplicate: keep it'], ['a' => 'skip', 'l' => 'Skip']], true); }
             else { $first = $seenHash[$ck]; $warn('dup_same', '', 'Identical to row ' . $first . ' (same date, time, amount, payee and account).', [['a' => 'skip', 'l' => 'Skip this row']]); } }
         else { if ($ext !== '' || $ref !== '') { $seenRef[$ck] = $n; } else { $seenHash[$ck] = $n; } }
         $key = $cnt[$ck] > 1 ? $base . '#' . $cnt[$ck] : $base;
         if ($date !== '' && $minor > 0 && !$blocked) { $fk = $date . '|' . $minor . '|' . imj_norm_name($payee !== '' ? $payee : $desc) . '|' . $accKey; if (isset($seenFuzzy[$fk]) && $cnt[$ck] === 1) { $warn('dup_fuzzy', '', 'Looks like row ' . $seenFuzzy[$fk] . ' (same date, amount and payee) with a different reference.', [['a' => 'skip', 'l' => 'Skip this row']]); } else { $seenFuzzy[$fk] = $n; } }
         // already in the ledger: same reference
-        if ($base !== $hash && $minor > 0 && isset($ctx['refs'][mb_strtolower($base)]) && !$blocked) { if ($ctx['refs'][mb_strtolower($base)] === $minor) { $err('dup_existing_ref', 'ref', 'Reference "' . $base . '" and the amount are already in your transactions.', [['a' => 'keep', 'l' => 'Keep it anyway'], ['a' => 'skip', 'l' => 'Skip']]); } }
+        if ($base !== $hash && $minor > 0 && isset($ctx['refs'][mb_strtolower($base)]) && !$blocked) { if ($ctx['refs'][mb_strtolower($base)] === $minor) { $err('dup_existing_ref', 'ref', 'Reference "' . $base . '" and the amount are already in your transactions.', [['a' => 'keep', 'l' => 'Keep it anyway'], ['a' => 'skip', 'l' => 'Skip']], true); } }
         $rows[] = ['n' => $n, 'date' => $date, 'time' => $time, 'amount' => $minor, 'dir' => $dir, 'xt' => $kind ?? 'expense', 'cgroup' => $cgroup, 'details' => $desc, 'payee' => $payee !== '' ? $payee : ($desc !== '' ? $desc : ($tagRaw !== '' ? $tagRaw : '')), 'other' => $kind === 'transfer' ? $to : $method, 'account' => $account, 'to_account' => $to, 'ref' => $ref !== '' ? $ref : $ext,
-            'order_id' => $ext, 'tag' => $tag, 'tag_raw' => $tagRaw, 'comment' => $remarks, 'notes' => $notesAll, 'status' => $status, 'balance' => $bal, 'method' => $method, 'key' => $key, 'hint' => null, 'blocked' => $blocked, 'issues' => array_values(array_unique($rowIssues))];
+            'order_id' => $ext, 'tag' => $tag, 'tag_raw' => $tagRaw, 'comment' => $remarks, 'notes' => $notesAll, 'status' => $status, 'balance' => $bal, 'method' => $method, 'key' => $key, 'hint' => null, 'blocked' => $blocked, 'hard' => $hard, 'issues' => array_values(array_unique($rowIssues))];
     }
     // accounts that were not listed
     if ($unlisted) { $iss('acc_unlisted', 'warning', 0, 'accounts', 'These account names are not in the "accounts" list: ' . implode(', ', array_map(fn($x) => '"' . $x . '"', array_slice(array_values($unlisted), 0, 5))) . (count($unlisted) > 5 ? ' …' : '') . '. They will be treated as separate accounts; check the mapping below.'); }
@@ -512,7 +512,7 @@ function import_json_adapter(): array { return ['label' => 'JSON', 'title' => 'Y
 /** Pasted / uploaded JSON text => stored preview token. Same rate limit as the file upload. */
 function import_json_handle_text(int $uid, string $text, string $name = 'pasted JSON'): string {
     if (!c_rate_ok('imp-up:' . $uid, 12, 3600)) { throw new UserError('You have uploaded a lot of files this hour. Please try again a little later.'); }
-    $notes = []; $doc = import_json_decode($text, $notes); $name = mb_substr(trim((string) preg_replace('/[^\p{L}\p{N} ._\-()]/u', '', $name)), 0, 120) ?: 'pasted JSON';
+    $notes = []; $doc = import_json_decode($text, $notes); $name = mb_substr(trim((string) preg_replace('/[^\p{L}\p{N} ._\-()]/u', '', basename($name))), 0, 120) ?: 'pasted JSON';
     $stmt = import_json_build($doc, $notes, import_json_context($uid), $name);
     return import_store_preview($uid, $name, $stmt);
 }
@@ -630,3 +630,24 @@ function import_json_panel_html(): string {
         . '<p class="imp-p">After the check you see every problem with the row it belongs to, can fix or skip rows with one tap, and can copy a short report to send back to your AI.</p></section></div>';
     return $o;
 }
+
+// ============================ admin: the prompt people copy ============================
+function import_json_admin_card(): string {
+    $cur = trim(site_setting('import_json_prompt', '')); $curS = trim(site_setting('import_json_prompt_short', ''));
+    $o = '<section class="card"><div class="p-6"><h2 class="text-lg font-semibold">JSON import prompt</h2><p class="mt-1 text-sm text-mute">The text people copy on <a class="underline" href="' . e(url('/import', ['tab' => 'json'])) . '">Import → Use your own AI</a> and give to any chat AI. Version ' . IMPORT_JSON_PROMPT_VERSION . ' of the format. '
+        . ($cur === '' && $curS === '' ? 'Using the built-in default.' : 'Customised.') . '</p>'
+        . form_open('admin-import-prompt', 'mt-4 space-y-3') . '<div><label class="label" for="ijp">Full prompt</label><textarea id="ijp" name="import_json_prompt" rows="14" class="input font-mono text-xs" maxlength="12000">' . e($cur !== '' ? $cur : import_json_default_prompt()) . '</textarea></div>'
+        . '<div><label class="label" for="ijs">Short prompt</label><textarea id="ijs" name="import_json_prompt_short" rows="6" class="input font-mono text-xs" maxlength="6000">' . e($curS !== '' ? $curS : import_json_default_prompt_short()) . '</textarea></div>'
+        . '<p class="text-xs text-mute">Placeholders: <code>{version}</code> <code>{today}</code> <code>{schema}</code> (the JSON schema) <code>{example}</code> (a small valid file). If you change the format rules, keep them in line with the schema; the importer checks every file regardless of what the prompt says.</p>'
+        . '<div class="flex flex-wrap justify-end gap-2"><button class="btn btn-dark">Save prompts</button></div></form>'
+        . '<div class="mt-3 flex flex-wrap gap-2 border-t border-line pt-4">' . post_btn('Reset both to the default', 'admin-import-prompt-reset', [], 'btn btn-sm') . '</div></div></section>';
+    return $o;
+}
+function do_admin_import_prompt(array $u): string {
+    $full = trim((string) ($_POST['import_json_prompt'] ?? '')); $short = trim((string) ($_POST['import_json_prompt_short'] ?? ''));
+    $full = str_replace(["\r\n", "\r"], "\n", $full); $short = str_replace(["\r\n", "\r"], "\n", $short);
+    if (mb_strlen($full) > 12000 || mb_strlen($short) > 6000) { throw new UserError('That prompt is too long.'); }
+    set_setting('import_json_prompt', $full === trim(import_json_default_prompt()) ? '' : $full); set_setting('import_json_prompt_short', $short === trim(import_json_default_prompt_short()) ? '' : $short);
+    audit('import.prompt', 'import-json', 'prompt saved'); return 'Prompts saved.';
+}
+function do_admin_import_prompt_reset(array $u): string { set_setting('import_json_prompt', ''); set_setting('import_json_prompt_short', ''); audit('import.prompt', 'import-json', 'reset to default'); return 'The import prompts are back to the default.'; }

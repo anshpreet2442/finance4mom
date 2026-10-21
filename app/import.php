@@ -167,7 +167,7 @@ function import_plan(int $uid, array $stmt, array $ch): array {
         $key = $r['key']; $tk = $target === 'new' ? 'n' . $ai : (string) (int) $target;
         if (isset($seen[mb_strtolower($key) . '|' . $tk])) { $key .= '@' . $ai; } $seen[mb_strtolower($r['key']) . '|' . $tk] = true; $seen[mb_strtolower($key) . '|' . $tk] = true;
         $dup = $target !== 'new' && isset($existing[mb_strtolower($key) . '|' . (int) $target]);
-        $blocked = !empty($r['blocked']) && $fx !== 'keep';
+        $blocked = !empty($r['blocked']) && !($fx === 'keep' && empty($r['hard']));   // "keep" only overrides duplicate errors, never an invalid date or amount
         $plan[] = ['row' => $r, 'ai' => $ai, 'to_ai' => $toAi, 'ti' => $ti, 'target' => $target, 'cat' => $cat, 'key' => mb_substr($key, 0, 80), 'dup' => $dup, 'blocked' => $blocked, 'fx' => $fx, 'include' => !isset($exclude[$r['n']]) && $fx !== 'skip' && !$blocked,
             'remarks' => array_key_exists($r['n'], $ch['rowrem'] ?? []) ? (string) $ch['rowrem'][$r['n']] : (string) $r['comment']];
     }
