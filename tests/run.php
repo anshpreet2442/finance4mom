@@ -1,0 +1,321 @@
+<?php
+declare(strict_types=1);
+/**
+ * Self-contained test runner (no Composer / PHPUnit needed):
+ *   MFNC_DB_PORT=3307 php tests/run.php
+ * It uses its own database (momsfinance_test) and table suffix (_mfnt), so real data is never touched.
+ * The test tables are dropped and recreated on every run.
+ */
+@session_start(); // CLI: start the session before any output so session helpers work
+putenv('MFNC_DB_NAME=' . (getenv('MFNC_TEST_DB') ?: 'momsfinance_test'));
+putenv('MFNC_TABLE_SUFFIX=_mfnt');
+putenv('MFNC_DEBUG=1');
+$_SERVER['SCRIPT_NAME'] = '/index.php'; $_SERVER['REQUEST_URI'] = '/';
+
+// drop leftovers before the app boots (FK checks off so order does not matter)
+define('MFNC', true);
+require __DIR__ . '/../app/db.php';
+define('DB_HOST', getenv('MFNC_DB_HOST') ?: '127.0.0.1'); define('DB_PORT', (int) (getenv('MFNC_DB_PORT') ?: 3306)); define('DB_NAME', getenv('MFNC_DB_NAME'));
+define('DB_USER', getenv('MFNC_DB_USER') ?: 'root'); define('DB_PASS', getenv('MFNC_DB_PASS') ?: ''); define('TABLE_SUFFIX', '_mfnt');
+define('APP_NAME', 'Test'); define('APP_TIMEZONE', 'Asia/Kolkata'); define('APP_DEBUG', true); define('SESSION_NAME', 'test'); define('FORCE_HTTPS_COOKIES', false);
+define('APP_URL', 'https://finance.test'); define('PAYU_BASE_URL', 'http://127.0.0.1:8099/api/v1'); define('PAYU_API_TOKEN', 'umpi_live_test'); define('PAYU_WEBHOOK_SECRET', 'whsec_test');
+$pdo = db(); $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+foreach ($pdo->query("SHOW TABLES LIKE '%\\_mfnt'")->fetchAll(PDO::FETCH_COLUMN) as $t) { $pdo->exec("DROP TABLE `$t`"); }
+$pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+foreach (['schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ui', 'charts'] as $f) { require __DIR__ . "/../app/$f.php"; }
+mfnc_install();
+require __DIR__ . '/../app/actions.php';
+
+// ---- tiny assertion helpers ----
+$pass = 0; $fail = 0; $section = '';
+function section(string $n): void { global $section; $section = $n; echo "\n$n\n"; }
+function check(string $name, bool $ok, string $detail = ''): void { global $pass, $fail; if ($ok) { $pass++; echo "  ✓ $name\n"; } else { $fail++; echo "  ✗ $name $detail\n"; } }
+function eq($a, $b, string $name): void { check($name, $a === $b, '(got ' . var_export($a, true) . ', expected ' . var_export($b, true) . ')'); }
+function throws(callable $fn, string $needle, string $name): void { try { $fn(); check($name, false, '(no exception)'); } catch (Throwable $e) { check($name, stripos($e->getMessage(), $needle) !== false, '(got "' . $e->getMessage() . '")'); } }
+
+$acct = fn(int $id, int $bal = 0, string $date = '2026-01-01') => ['id' => $id, 'opening_balance' => $bal, 'opening_date' => $date];
+$n = 0; $T = function (array $o) use (&$n) { return $o + ['id' => ++$n, 'status' => 'completed', 'account_id' => 1, 'to_account_id' => null, 'category_id' => null]; };
+
+section('money');
+eq(parse_money('1,25,000'), 12500000, 'parses Indian grouping'); eq(parse_money('₹ 0.1'), 10, 'parses 0.1 exactly'); eq(parse_money('19.99'), 1999, '19.99 has no float error');
+eq(parse_money('1.005'), null, 'rejects 3 decimals'); eq(parse_money('-5'), null, 'rejects negatives by default'); eq(parse_money('-5', true), -500, 'allows negatives when asked'); eq(parse_money('abc'), null, 'rejects text');
+$in = ['currency' => 'INR', 'locale' => 'en-IN']; eq(fmt(12500000, $in), '₹1,25,000', 'Indian grouping ₹1,25,000'); eq(fmt(12550, $in), '₹125.50', 'fractions shown when present');
+eq(fmt(12500000, ['currency' => 'USD', 'locale' => 'en-US']), '$125,000', 'US grouping'); eq(fmt(-500000, $in), '−₹5,000', 'negative formatting'); eq(money_input(12505), '125.05', 'round-trip input value');
+eq(fmt_short(15000000, $in), '1.5L', 'compact lakh');
+
+section('dates');
+eq(add_months_to_date('2026-01-31', 1), '2026-02-28', 'month-end clamp'); eq(next_due('2026-02-28', 'monthly', 31), '2026-03-31', 'anchor day restored');
+eq(next_due('2026-03-15', 'quarterly'), '2026-06-15', 'quarterly'); eq(months_between('2026-10', '2027-02'), 4, 'months between');
+eq(occurrence_dates('2026-10-05', 5, 'quarterly', '2027-06-30'), ['2026-10-05', '2027-01-05', '2027-04-05'], 'occurrence dates'); check('rejects 2026-02-30', !valid_date('2026-02-30'));
+
+section('cash accounting');
+$accts = [$acct(1, 100000), $acct(2, 0)];
+$txs = [$T(['type' => 'income', 'amount' => 50000, 'date' => '2026-10-01']), $T(['type' => 'transfer', 'amount' => 30000, 'date' => '2026-10-02', 'account_id' => 1, 'to_account_id' => 2])];
+$s = summarize_month($accts, $txs, [], '2026-10');
+eq($s['income'], 50000, 'transfer is not income'); eq($s['expenses'], 0, 'transfer is not an expense'); eq(total_cash($accts, $txs), 150000, 'total cash unchanged by transfer'); eq(account_balance($accts[1], $txs), 30000, 'destination account credited');
+$accts = [$acct(1, 0)]; $txs = [$T(['type' => 'income', 'amount' => 100000, 'date' => '2026-10-01']), $T(['type' => 'expense', 'amount' => 40000, 'date' => '2026-10-03'])];
+$contribs = [['target_type' => 'goal', 'target_id' => 1, 'amount' => 20000, 'date' => '2026-10-05']];
+$s = summarize_month($accts, $txs, $contribs, '2026-10');
+eq($s['expenses'], 40000, 'contribution is not an expense'); eq($s['net'], 60000, 'net savings = income - expenses'); eq($s['moved'], 20000, 'moved-to-savings reported separately'); eq(total_cash($accts, $txs), 60000, 'contribution does not change cash');
+$txs = [$T(['type' => 'income', 'amount' => 100000, 'date' => '2026-10-01']), $T(['type' => 'expense', 'amount' => 30000, 'date' => '2026-10-02']), $T(['type' => 'refund', 'amount' => 10000, 'date' => '2026-10-04']),
+    $T(['type' => 'income', 'amount' => 99999, 'date' => '2026-10-20', 'status' => 'planned']), $T(['type' => 'expense', 'amount' => 5000, 'date' => '2026-10-21', 'status' => 'planned']), $T(['type' => 'adjustment', 'amount' => -2000, 'date' => '2026-10-22'])];
+$s = summarize_month($accts, $txs, [], '2026-10');
+eq($s['expenses'], 20000, 'refund reduces net expenses'); eq($s['income_expected'], 99999, 'planned income not received'); eq($s['planned_expenses'], 5000, 'planned expense tracked'); eq($s['remaining'], 78000, 'remaining includes adjustment'); eq(total_cash($accts, $txs), 78000, 'planned items never count as cash');
+$accts = [$acct(1, 10000)]; $txs = [$T(['type' => 'income', 'amount' => 50000, 'date' => '2026-09-10']), $T(['type' => 'expense', 'amount' => 20000, 'date' => '2026-09-12'])];
+$s = summarize_month($accts, $txs, [], '2026-10'); eq($s['opening'], 40000, 'opening balance carried forward'); eq($s['rate'], null, 'no income => savings rate null');
+$s = summarize_month([$acct(1)], [$T(['type' => 'income', 'amount' => 100000, 'date' => '2026-10-01']), $T(['type' => 'expense', 'amount' => 75000, 'date' => '2026-10-02'])], [], '2026-10'); check('savings rate 25%', abs($s['rate'] - 25) < 1e-9);
+
+section('goals & sinking funds');
+$g = goal_progress(['target_amount' => 12000000, 'target_date' => '2027-09-30', 'monthly_target' => 1000000], 2000000, '2026-10-15');
+eq($g['remaining'], 10000000, 'goal remaining'); eq($g['months'], 12, 'months to target'); eq($g['required'], 833334, 'required monthly = ceil(remaining/months)'); eq($g['est'], '2027-07', 'estimated completion (10 contributions from this month)'); eq($g['behind'], false, 'on track');
+$exact = goal_progress(['target_amount' => 12000000, 'target_date' => '2027-09-30', 'monthly_target' => 833334], 2000000, '2026-10-15'); eq($exact['est'], '2027-09', 'exactly on plan finishes in target month'); eq($exact['behind'], false, 'exact plan is not behind');
+eq(goal_progress(['target_amount' => 12000000, 'target_date' => '2027-09-30', 'monthly_target' => 100000], 2000000, '2026-10-15')['behind'], true, 'small plan is behind');
+$g = goal_progress(['target_amount' => 50000, 'target_date' => null, 'monthly_target' => 0], 10000, '2026-10-15'); eq($g['required'], null, 'no date => no required monthly'); eq($g['est'], null, 'no plan => no estimate'); eq($g['behind'], false, 'no date => never behind');
+$d = goal_progress(['target_amount' => 50000, 'target_date' => '2026-01-01', 'monthly_target' => 0], 60000, '2026-10-15'); eq($d['complete'], true, 'overfunded goal complete'); eq($d['remaining'], 0, 'no negative remaining');
+eq(goal_progress(['target_amount' => 50000, 'target_date' => '2026-01-01', 'monthly_target' => 0], 0, '2026-10-15')['required'], 50000, 'past date => all now');
+eq(monthly_set_aside(2400000, 'yearly'), 200000, '24,000 yearly => 2,000/month'); eq(monthly_set_aside(900000, 'quarterly'), 300000, 'quarterly'); eq(catch_up_set_aside(2400000, 0, '2027-01-15', '2026-10-15'), 600000, 'catch-up'); eq(catch_up_set_aside(2400000, 2400000, '2027-01-15', '2026-10-15'), 0, 'fully funded => 0');
+
+section('bills, cash-flow, ranking, planner');
+eq(occurrence_state(1000, 0, '2026-10-20', '2026-10-15')['status'], 'upcoming', 'upcoming'); eq(occurrence_state(1000, 400, '2026-10-20', '2026-10-15')['status'], 'partial', 'partial'); eq(occurrence_state(1000, 1000, '2026-10-10', '2026-10-15')['status'], 'paid', 'paid');
+$o = occurrence_state(1000, 400, '2026-10-10', '2026-10-15'); eq($o['status'], 'overdue', 'overdue'); eq($o['outstanding'], 600, 'partial outstanding');
+$r = project_cashflow(10000, [['date' => '2026-11-05', 'amount' => -8000, 'label' => 'Rent'], ['date' => '2026-11-01', 'amount' => 5000, 'label' => 'Pay'], ['date' => '2026-11-10', 'amount' => -9000, 'label' => 'Insurance']]);
+eq($r['shortfall']['label'] ?? null, 'Insurance', 'first shortfall found'); eq($r['lowest']['balance'] ?? null, -2000, 'lowest balance');
+$base = ['status' => 'saving', 'actual' => null, 'saved' => 0];
+$mk = fn($id, $name, $pri, $est, $date, $st = 'saving') => ['id' => $id, 'name' => $name, 'priority' => $pri, 'status' => $st, 'actual' => null, 'estimated' => $est, 'target_date' => $date] + purchase_needs(['estimated' => $est, 'actual' => null, 'target_date' => $date], 0, '2026-10-15') + ['saved' => 0];
+$ranked = rank_purchases([$mk(1, 'Sofa', 'low', 100000, '2027-01-31'), $mk(2, 'Fridge', 'high', 120000, '2027-03-31'), $mk(3, 'Done', 'high', 1, null, 'purchased')], 50000);
+eq(array_column($ranked, 'name'), ['Fridge', 'Sofa'], 'ranking: priority then date; purchased excluded'); check('never over-allocates', array_sum(array_column($ranked, 'suggested')) <= 50000);
+$lines = build_proposal(['bills' => [['id' => 1, 'name' => 'Rent', 'outstanding' => 40000]], 'yearly' => [['id' => 2, 'name' => 'LIC', 'set_aside' => 2000]], 'household' => [['id' => 3, 'name' => 'Groceries', 'estimate' => 15000]], 'personal' => [['id' => 4, 'name' => 'Shopping', 'estimate' => 10000]],
+    'occasional' => [], 'goals' => [['id' => 5, 'name' => 'Emergency', 'monthly' => 20000, 'priority' => 'high']], 'house' => [['id' => 6, 'name' => 'Sofa', 'monthly' => 8000, 'priority' => 'low']], 'personal_fund' => [], 'big' => []]);
+eq(plan_totals(100000, $lines)['unallocated'], 5000, 'plan leaves 5,000 unallocated'); $over = plan_totals(80000, $lines); eq($over['deficit'], 15000, 'deficit is reported, not hidden');
+$sg = suggest_adjustments($lines, $over['deficit']); eq(array_sum(array_column($sg, 'saves')), 13000, 'suggestions free 13,000 (personal half + low-priority sofa)'); check('essentials never suggested', !array_filter($sg, fn($x) => in_array($x['label'], ['Rent', 'Emergency', 'LIC', 'Groceries'], true)));
+eq(suggest_adjustments($lines, 0), [], 'no deficit => no suggestions');
+
+// ---------- services against the database ----------
+$mkUser = fn(string $email) => create_user($email, 'T ' . $email, 'password-12345');
+$A = $mkUser('a@x.test'); $B = $mkUser('b@x.test');
+$accA = (int) val('SELECT id FROM {accounts} WHERE user_id=? ORDER BY id LIMIT 1', [$A]); $accB = (int) val('SELECT id FROM {accounts} WHERE user_id=? ORDER BY id LIMIT 1', [$B]);
+run('UPDATE {accounts} SET opening_date=? WHERE user_id IN (?,?)', ['2026-01-01', $A, $B]);
+$TODAY = '2026-10-15'; $snap = fn() => load_snapshot($A, $TODAY); $dash = fn() => dashboard_data($snap(), '2026-10');
+$tx = fn(array $o) => create_transaction($A, $o + ['status' => 'completed', 'account_id' => $accA, 'date' => '2026-10-02']);
+
+section('data isolation');
+$id = $tx(['type' => 'income', 'amount' => 10000, 'description' => 'mine']);
+throws(fn() => update_transaction($B, $id, ['type' => 'income', 'amount' => 1, 'date' => $TODAY, 'account_id' => $accB]), 'not found', "other user can't edit");
+throws(fn() => delete_transaction($B, $id), 'not found', "other user can't delete");
+throws(fn() => create_transaction($B, ['type' => 'income', 'amount' => 5, 'date' => $TODAY, 'account_id' => $accA]), 'not found', "other user can't use my account");
+throws(fn() => add_contribution($B, 'goal', 1, 5, $TODAY, null, null), 'not found', "other user can't contribute to my goal");
+eq((int) val('SELECT COUNT(*) FROM {transactions} WHERE user_id=?', [$B]), 0, "other user sees none of my rows"); delete_transaction($A, $id);
+
+section('transaction workflows');
+throws(fn() => $tx(['type' => 'transfer', 'amount' => 100, 'to_account_id' => $accA]), 'different', 'transfer needs different accounts');
+throws(fn() => $tx(['type' => 'expense', 'amount' => 0]), 'greater than zero', 'zero amount rejected');
+$e = $tx(['type' => 'expense', 'amount' => 1000]); $tx(['type' => 'refund', 'amount' => 400, 'refund_of' => $e]);
+throws(fn() => $tx(['type' => 'refund', 'amount' => 700, 'refund_of' => $e]), 'exceed', 'refund cannot exceed original'); delete_transaction($A, $e);
+eq((int) val('SELECT COUNT(*) FROM {transactions} WHERE user_id=? AND refund_of IS NOT NULL', [$A]), 0, 'deleting an expense removes its refunds');
+$acc2 = insert('INSERT INTO {accounts} (user_id,name,opening_date) VALUES (?,?,?)', [$A, 'Temp', '2026-01-01']); create_transaction($A, ['type' => 'income', 'status' => 'completed', 'amount' => 100, 'date' => '2026-10-01', 'account_id' => $acc2]);
+eq(delete_account($A, $acc2), 'archived', 'account with history is archived, not deleted');
+save_template($A, null, ['type' => 'income', 'description' => 'Salary', 'amount' => 5000000, 'category_id' => null, 'account_id' => $accA, 'frequency' => 'monthly', 'next_date' => '2026-10-01', 'active' => true]);
+generate_from_templates($A, $TODAY); generate_from_templates($A, $TODAY);
+$planned = all('SELECT * FROM {transactions} WHERE user_id=? AND template_id IS NOT NULL', [$A]); eq(count($planned), 1, 'recurring item generated once (idempotent)'); eq($planned[0]['status'], 'planned', 'generated as planned, not paid');
+$base = $dash()['sum']['income']; eq($dash()['sum']['income_expected'], 5000000, 'shown as expected income'); complete_planned($A, (int) $planned[0]['id'], '2026-10-01'); eq($dash()['sum']['income'], $base + 5000000, 'completing it moves it to received');
+
+section('savings & bills never double count');
+$before = $dash();
+$goal = save_goal($A, null, ['kind' => 'long-term', 'name' => 'Emergency', 'target_amount' => 10000000, 'target_date' => '2027-10-31', 'priority' => 'high', 'monthly_target' => 500000, 'monthly_limit' => 0, 'notes' => null]);
+add_contribution($A, 'goal', $goal, 1000000, '2026-10-05', null, null); $after = $dash();
+eq($after['sum']['expenses'], $before['sum']['expenses'], 'goal contribution is not an expense'); eq($after['cash'], $before['cash'], 'cash unchanged'); eq($after['reserved'], 1000000, 'reserved increases'); eq($after['spendable'], $before['spendable'] - 1000000, 'spendable decreases');
+throws(fn() => add_contribution($A, 'goal', $goal, -2000000, $TODAY, null, null), 'withdraw', 'cannot withdraw more than saved');
+$bill = save_bill($A, null, ['kind' => 'yearly', 'name' => 'LIC', 'amount' => 2400000, 'category_id' => null, 'account_id' => $accA, 'frequency' => 'yearly', 'due_date' => '2026-11-10', 'reminder_days' => 30, 'active' => true, 'notes' => null], $TODAY);
+add_contribution($A, 'bill', $bill, 600000, '2026-10-06', null, null); $before = $dash(); $occ = (int) val('SELECT id FROM {bill_occurrences} WHERE bill_id=?', [$bill]);
+pay_occurrence($A, $occ, 600000, $TODAY, $accA, true); $after = $dash();
+eq($after['sum']['expenses'] - $before['sum']['expenses'], 600000, 'paying a bill = exactly one expense'); eq($after['cash'], $before['cash'] - 600000, 'cash falls by the payment'); eq($after['reserved'], $before['reserved'] - 600000, 'reserve released');
+eq($after['spendable'], $before['spendable'], 'spendable unchanged: not deducted twice'); throws(fn() => pay_occurrence($A, $occ, 2000000, $TODAY, $accA, false), 'more than', 'cannot overpay');
+$st = $snap(); $o = array_values(array_filter($st['occurrences'], fn($x) => (int) $x['id'] === $occ))[0]; eq($o['paid'], 600000, 'partial payment recorded, remainder stays a liability');
+$payTx = (int) val('SELECT id FROM {transactions} WHERE occurrence_id=?', [$occ]); throws(fn() => update_transaction($A, $payTx, ['type' => 'expense', 'status' => 'completed', 'amount' => 1, 'date' => $TODAY, 'account_id' => $accA]), "can't be edited", 'bill payments cannot be edited');
+delete_transaction($A, $payTx); eq($dash()['reserved'], $before['reserved'], 'deleting the payment restores the reserve');
+$eBefore = $dash()['sum']['expenses']; save_bill($A, null, ['kind' => 'bill', 'name' => 'Electricity', 'amount' => 250000, 'category_id' => null, 'account_id' => $accA, 'frequency' => 'monthly', 'due_date' => '2026-10-20', 'reminder_days' => 5, 'active' => true, 'notes' => null], $TODAY);
+check('unpaid bill is a liability, not an expense', $dash()['upcoming_total'] >= 250000 && $dash()['sum']['expenses'] === $eBefore);
+$pur = save_purchase($A, null, ['kind' => 'big', 'name' => 'Fridge', 'description' => null, 'group_label' => null, 'estimated' => 12000000, 'priority' => 'high', 'target_date' => '2027-03-31', 'status' => 'saving', 'monthly_setaside' => 2000000]);
+add_contribution($A, 'purchase', $pur, 5000000, '2026-10-07', null, null); $before = $dash(); mark_purchased($A, $pur, 11000000, $TODAY, $accA, null); $after = $dash();
+eq($after['sum']['expenses'] - $before['sum']['expenses'], 11000000, 'purchase = one expense'); eq($after['reserved'], $before['reserved'] - 5000000, 'pot released'); eq($after['spendable'], $before['spendable'] - 6000000, 'spendable falls only by the unsaved part');
+throws(fn() => mark_purchased($A, $pur, 1, $TODAY, $accA, null), 'Already', 'cannot purchase twice');
+$fund = save_goal($A, null, ['kind' => 'personal', 'name' => 'Fun', 'target_amount' => 0, 'target_date' => null, 'priority' => 'low', 'monthly_target' => 300000, 'monthly_limit' => 300000, 'notes' => null]);
+add_contribution($A, 'goal', $fund, 300000, '2026-10-03', null, null); $before = $dash(); $ftx = $tx(['type' => 'expense', 'amount' => 100000, 'description' => 'Saree', 'fund_goal_id' => $fund]); $after = $dash();
+eq($after['spendable'], $before['spendable'], 'personal-fund spending not counted twice'); eq($after['reserved'], $before['reserved'] - 100000, 'fund reduced');
+throws(fn() => delete_contribution($A, (int) val('SELECT id FROM {contributions} WHERE transaction_id=?', [$ftx])), 'payment', 'payment-linked entry cannot be deleted alone');
+
+section('monthly plan guard');
+$pl = [['section' => 'goals', 'refType' => 'goal', 'refId' => 1, 'label' => 'x', 'amount' => 500, 'priority' => 'high']];
+throws(fn() => save_plan($A, '2026-10', $pl, 'confirmed', 400), 'over the available', 'cannot confirm a plan above available funds'); save_plan($A, '2026-10', $pl, 'draft', 400); save_plan($A, '2026-10', $pl, 'confirmed', 500);
+eq(val('SELECT status FROM {monthly_plans} WHERE user_id=?', [$A]), 'confirmed', 'valid plan confirms');
+
+section('csv, security helpers, admin rules');
+$rows = parse_csv_text("a,b,c\r\n\"a,b\",\"say \"\"hi\"\"\",\"line1\nline2\"\r\n"); eq($rows[1], ['a,b', 'say "hi"', "line1\nline2"], 'CSV quotes, commas and newlines');
+eq(safe_back('//evil.com'), url('/'), 'open redirect blocked'); eq(safe_back('/transactions?x=1'), '/transactions?x=1', 'local back-link allowed'); eq(e('<a href="x">'), '&lt;a href=&quot;x&quot;&gt;', 'output escaped');
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+throws(function () { for ($i = 0; $i < 6; $i++) { try { attempt_login('a@x.test', 'wrong-password'); } catch (UserError $e) { if (str_contains($e->getMessage(), 'Too many')) { throw $e; } } } }, 'Too many', 'login throttled after 5 failures');
+run('DELETE FROM {login_attempts}'); eq(attempt_login('a@x.test', 'password-12345'), $A, 'correct password logs in');
+run('UPDATE {users} SET role=? WHERE id=?', ['admin', $A]); $_POST = ['id' => (string) $A, 'status' => 'disabled']; $GLOBALS['__user'] = ['id' => $B, 'role' => 'admin'];
+throws(fn() => do_admin_user_status(['id' => $B, 'role' => 'admin']), 'no active administrator', 'cannot disable the last administrator');
+$_POST = ['id' => (string) $B, 'role' => 'admin']; do_admin_user_role(['id' => $A, 'role' => 'admin']); $_POST = ['id' => (string) $A, 'status' => 'disabled']; do_admin_user_status(['id' => $B, 'role' => 'admin']);
+throws(fn() => attempt_login('a@x.test', 'password-12345'), 'disabled', 'disabled users cannot sign in');
+eq(val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME LIKE ?', [DB_NAME, '%\\_mfnt']), count(mfnc_schema()), 'every table was auto-created with the suffix');
+
+
+// ================= billing: charges, enforcement, PayU flow (against a mock gateway) =================
+$mockState = sys_get_temp_dir() . '/mfnc_gateway_mock.json'; @unlink($mockState);
+$mock = proc_open([PHP_BINARY, '-S', '127.0.0.1:8099', __DIR__ . '/gateway_mock.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+for ($i = 0; $i < 30; $i++) { $fp = @fsockopen('127.0.0.1', 8099, $en, $es, 0.2); if ($fp) { fclose($fp); break; } usleep(100000); }
+$mockDb = fn() => json_decode((string) @file_get_contents($mockState), true) ?: ['payments' => [], 'inits' => 0];
+$setMock = function (string $id, string $status) use ($mockState, $mockDb) { $d = $mockDb(); $d['payments'][$id]['status'] = $status; file_put_contents($mockState, json_encode($d)); };
+$sign = fn(string $raw) => 'sha256=' . hash_hmac('sha256', $raw, PAYU_WEBHOOK_SECRET);
+$hook = function (array $body, ?string $delivery = null, ?string $sig = null) use ($sign) { $raw = json_encode($body); return handle_payu_webhook($raw, ['X-UMPI-Signature' => $sig ?? $sign($raw), 'X-UMPI-Delivery-Id' => $delivery ?? bin2hex(random_bytes(6))]); };
+$cfgSet = function (array $kv) { foreach ($kv as $k => $v) { run('INSERT INTO {settings} (k,v) VALUES (?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)', [$k, (string) $v]); } site_settings_flush(); };
+$M = create_user('mom@x.test', 'Mom', 'password-12345'); $ADM = create_user('boss@x.test', 'Boss', 'password-12345', 'admin');
+$momU = ['id' => $M, 'role' => 'user']; $admU = ['id' => $ADM, 'role' => 'admin'];
+$T0 = '2026-10-15';
+
+section('billing: charges, late fees, enforcement');
+eq(late_fee_for(100000, ['fee_type' => 'flat', 'fee_flat' => 5000, 'fee_percent' => 0]), 5000, 'flat late fee'); eq(late_fee_for(100001, ['fee_type' => 'percent', 'fee_percent' => 500, 'fee_flat' => 0]), 5001, '5% late fee rounds up'); eq(late_fee_for(100000, ['fee_type' => 'none', 'fee_flat' => 9, 'fee_percent' => 9]), 0, 'no fee when off');
+$cfgSet(['billing_enabled' => 1, 'grace_days' => 5, 'late_fee_type' => 'flat', 'late_fee_flat' => 5000, 'restrict_after_days' => 14, 'lock_after_days' => 30]);
+$plan = admin_save_plan($ADM, null, $M, 'Family contribution', 'Monthly share', 200000, 5, '2026-08', null, true);
+billing_sync($M, $T0); billing_sync($M, $T0);
+eq((int) val('SELECT COUNT(*) FROM {charges} WHERE user_id=?', [$M]), 3, 'monthly charges generated for Aug, Sep, Oct (idempotent)');
+$rows = array_column(charge_rows($M, $T0), null, 'period'); eq($rows['2026-10']['label'], 'overdue', 'Oct 5 is overdue on Oct 15'); eq($rows['2026-08']['late_fee'], 5000, 'late fee applied once after grace'); eq($rows['2026-10']['late_fee'], 5000, 'Oct is 10 days past due: fee applied (grace 5)');
+billing_sync($M, '2026-10-20'); eq((int) val('SELECT late_fee FROM {charges} WHERE user_id=? AND period=?', [$M, '2026-08']), 5000, 'late fee is not applied twice');
+eq(billing_level($momU, '2026-10-06'), 3, 'Aug charge is 62 days overdue => locked'); run("UPDATE {charges} SET status='waived' WHERE user_id=? AND period IN ('2026-08','2026-09')", [$M]);
+eq(billing_level($momU, '2026-10-06'), 1, 'only Oct left, 1 day overdue => reminder'); eq(billing_level($momU, '2026-10-20'), 2, '15 days overdue passes the 14-day restrict threshold');
+$cfgSet(['restrict_after_days' => 10]); eq(billing_level($momU, '2026-10-16'), 2, 'restricted after 10 days overdue'); eq(billing_level($momU, '2026-11-05'), 3, 'locked after 30 days overdue');
+eq(billing_level($admU, '2026-11-05'), 0, 'admins are never restricted'); run('UPDATE {users} SET billing_enforced=0 WHERE id=?', [$M]); eq(billing_level($momU, '2026-11-05'), 0, 'exempt user is never restricted'); run('UPDATE {users} SET billing_enforced=1 WHERE id=?', [$M]);
+$cfgSet(['billing_enabled' => 0]); eq(billing_level($momU, '2026-11-05'), 0, 'billing switched off => no enforcement'); $cfgSet(['billing_enabled' => 1]);
+$octId = (int) val('SELECT id FROM {charges} WHERE user_id=? AND period=?', [$M, '2026-10']);
+eq(admin_charge_action($octId, 'waive_fee', null), 'Late fee waived.', 'late fee can be waived'); eq(charge_payable(one('SELECT * FROM {charges} WHERE id=?', [$octId])), 200000, 'waived fee not payable');
+$one = admin_create_charge($ADM, $M, 'Diwali gift', null, 150000, '2026-12-01'); eq(billing_level($momU, '2026-10-16'), 2, 'a not-yet-due charge does not add pressure');
+throws(fn() => admin_create_charge($ADM, $M, 'x', null, 0, '2026-12-01'), 'greater than zero', 'zero charge rejected'); throws(fn() => admin_charge_action($one, 'explode', null), 'Unknown', 'unknown admin action rejected');
+
+section('billing: starting a payment through the gateway');
+$before = $mockDb()['inits']; $url = start_payment($M, $octId); check('checkout url returned', str_starts_with($url, 'https://gateway.test/embed?ct=apay_'));
+$pay = one('SELECT * FROM {payments} WHERE charge_id=?', [$octId]); eq($pay['amount'], 200000, 'payment row stores minor units'); $g = $mockDb()['payments'][$pay['api_payment_id']];
+eq($g['amount'], 2000, 'gateway receives rupees (decimal), not paise'); eq($g['currency'], 'INR', 'INR'); eq($g['redirect_mode'], 'signed', 'signed return mode requested'); eq($g['success'], 'https://finance.test/dues/return', 'return link is absolute and uses APP_URL'); eq($g['metadata']['charge_id'], $octId, 'metadata carries the charge id');
+eq(start_payment($M, $octId), $url, 'an open checkout is reused (init is not idempotent)'); eq($mockDb()['inits'], $before + 1, 'gateway init called only once');
+throws(fn() => start_payment($ADM, $octId), 'not found', "another user cannot pay (or even see) someone else's charge");
+$tok = PAYU_API_TOKEN; $r = payu_request('GET', '/ping'); eq($r['status'], 'authenticated', 'ping works with the token');
+
+section('billing: webhook security and idempotency');
+$base = ['event' => 'payment.captured', 'api_payment_id' => $pay['api_payment_id'], 'amount' => 2000, 'currency' => 'INR', 'status' => 'captured', 'rzp_payment_id' => 'pay_1', 'method' => 'upi'];
+eq($hook($base, 'd-bad', 'sha256=deadbeef')[0], 401, 'bad signature rejected'); eq((int) val('SELECT COUNT(*) FROM {webhook_events}'), 0, 'rejected webhook leaves no trace');
+eq(handle_payu_webhook('{"event":"x"}', [])[0], 401, 'missing signature rejected');
+eq(val('SELECT status FROM {charges} WHERE id=?', [$octId]), 'pending', 'still unpaid after rejected webhooks');
+eq($hook(['event' => 'payment.failed', 'api_payment_id' => $pay['api_payment_id'], 'status' => 'failed', 'error' => ['message' => 'Declined']])[0], 200, 'failed event acknowledged'); eq(val('SELECT status FROM {charges} WHERE id=?', [$octId]), 'pending', 'a failed attempt does not close the charge');
+eq($hook($base + ['x' => 1], 'd-wrong', null)[0], 200, 'captured accepted'); // amount ok => paid; use a fresh payment below for the mismatch case
+eq(val('SELECT status FROM {charges} WHERE id=?', [$octId]), 'paid', 'capture after an earlier failure still settles the charge'); eq(val('SELECT paid_via FROM {charges} WHERE id=?', [$octId]), 'gateway', 'paid via gateway');
+eq($hook($base, 'd-wrong', null), [200, 'duplicate'], 'same delivery id is a no-op'); eq($hook($base, 'd-new-same-event')[0], 200, 'replayed event with a new id is harmless'); eq((int) val("SELECT COUNT(*) FROM {notifications} WHERE user_id=? AND dedupe_key=?", [$M, "charge:$octId:paid"]), 1, 'one receipt notification only');
+eq($hook(['event' => 'payment.captured', 'api_payment_id' => 'apay_unknown', 'amount' => 1, 'currency' => 'INR'])[0], 200, 'unknown payment acknowledged'); eq($hook(['event' => 'brand.new.event'])[0], 200, 'unknown event acknowledged (no retry storm)');
+$sepId = (int) val('SELECT id FROM {charges} WHERE user_id=? AND period=?', [$M, '2026-09']); run("UPDATE {charges} SET status='pending' WHERE id=?", [$sepId]); start_payment($M, $sepId);
+$p2 = one('SELECT * FROM {payments} WHERE charge_id=?', [$sepId]);
+$hook(['event' => 'payment.captured', 'api_payment_id' => $p2['api_payment_id'], 'amount' => 1, 'currency' => 'INR', 'status' => 'captured']); eq(val('SELECT status FROM {charges} WHERE id=?', [$sepId]), 'pending', 'amount mismatch is NOT accepted as paid');
+$hook(['event' => 'payment.captured', 'api_payment_id' => $p2['api_payment_id'], 'amount' => 2050, 'currency' => 'USD', 'status' => 'captured']); eq(val('SELECT status FROM {charges} WHERE id=?', [$sepId]), 'pending', 'currency mismatch is NOT accepted as paid');
+
+section('billing: return page lookup, signed return links, admin overrides');
+$setMock($p2['api_payment_id'], 'captured'); $fresh = refresh_payment(find_payment($p2['api_payment_id'])); eq($fresh['status'], 'captured', 'server-side status lookup settles the payment'); eq(val('SELECT status FROM {charges} WHERE id=?', [$sepId]), 'paid', 'charge paid via status lookup (no browser trust)');
+$q = ['api_payment_id' => 'apay_1', 'status' => 'captured', 'payment_id' => 'pay_1', 'order_id' => 'o_1', 'amount' => '20.00', 'currency' => 'INR', 'ts' => (string) time()]; ksort($q); $q['sig'] = hash_hmac('sha256', http_build_query($q), PAYU_WEBHOOK_SECRET);
+check('valid signed return accepted', verify_return_sig($q, PAYU_WEBHOOK_SECRET)); $bad = $q; $bad['status'] = 'failed'; check('tampered return rejected', !verify_return_sig($bad, PAYU_WEBHOOK_SECRET));
+$old = $q; $old['ts'] = (string) (time() - 4000); unset($old['sig']); ksort($old); $old['sig'] = hash_hmac('sha256', http_build_query($old), PAYU_WEBHOOK_SECRET); check('old return link rejected', !verify_return_sig($old, PAYU_WEBHOOK_SECRET)); check('no secret => nothing verifies', !verify_return_sig($q, ''));
+$octPending = (int) val('SELECT id FROM {charges} WHERE user_id=? AND title=?', [$M, 'Diwali gift']); eq(admin_charge_action($octPending, 'paid', 'cash received'), 'Marked as paid (received outside the app).', 'admin can record a cash payment'); eq(val('SELECT paid_via FROM {charges} WHERE id=?', [$octPending]), 'manual', 'recorded as manual');
+throws(fn() => admin_charge_action($octPending, 'cancel', null), 'unpaid', 'a settled charge cannot be cancelled');
+eq(PAYU_API_TOKEN === 'umpi_live_test' && !str_contains((string) val('SELECT GROUP_CONCAT(detail) FROM {audit_log}'), 'umpi_live'), true, 'token never appears in the audit log');
+proc_terminate($mock); @unlink($mockState);
+section('upgrades');
+$child = (string) shell_exec('MFNC_DB_NAME=' . escapeshellarg(DB_NAME) . ' MFNC_DB_PORT=' . (int) DB_PORT . ' ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/oldconfig.php') . ' 2>&1');
+eq(trim($child), 'OK', 'an older config.php (without the payment settings) keeps working after an upgrade');
+
+// ================= passkeys: a simulated authenticator exercises registration and sign-in =================
+final class B { public function __construct(public string $s) {} }
+function cbor_head(int $mt, int $n): string { return $n < 24 ? chr(($mt << 5) | $n) : ($n < 256 ? chr(($mt << 5) | 24) . chr($n) : chr(($mt << 5) | 25) . pack('n', $n)); }
+function cbor_enc($v): string {
+    if (is_int($v)) { return $v >= 0 ? cbor_head(0, $v) : cbor_head(1, -1 - $v); }
+    if ($v instanceof B) { return cbor_head(2, strlen($v->s)) . $v->s; }
+    if (is_string($v)) { return cbor_head(3, strlen($v)) . $v; }
+    if (is_array($v) && $v !== [] && array_is_list($v)) { return cbor_head(4, count($v)) . implode('', array_map('cbor_enc', $v)); }
+    $o = cbor_head(5, count($v)); foreach ($v as $k => $x) { $o .= cbor_enc($k) . cbor_enc($x); } return $o;
+}
+$RPID = webauthn_rp()['id']; $ORIGIN = webauthn_rp()['origin'];
+$pad32 = fn($b) => str_pad($b, 32, "\0", STR_PAD_LEFT);
+$newEc = function () use ($pad32) { $k = openssl_pkey_new(['curve_name' => 'prime256v1', 'private_key_type' => OPENSSL_KEYTYPE_EC]); $d = openssl_pkey_get_details($k)['ec']; return [$k, [1 => 2, 3 => -7, -1 => 1, -2 => new B($pad32($d['x'])), -3 => new B($pad32($d['y']))]]; };
+$newRsa = function () { $k = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]); $d = openssl_pkey_get_details($k)['rsa']; return [$k, [1 => 3, 3 => -257, -1 => new B($d['n']), -2 => new B($d['e'])]]; };
+$authData = fn(string $rpId, int $flags, int $count, string $tail = '') => hash('sha256', $rpId, true) . chr($flags) . pack('N', $count) . $tail;
+$regIn = function (array $u, array $cose, string $credId, array $o = []) use ($ORIGIN, $RPID, $authData) {
+    $opts = webauthn_register_options($u); $chal = $o['challenge'] ?? $opts['challenge'];
+    $ad = $authData($o['rp'] ?? $RPID, $o['flags'] ?? 0x45, 0, str_repeat("\0", 16) . pack('n', strlen($credId)) . $credId . cbor_enc($cose));
+    return ['name' => 'Test phone', 'clientDataJSON' => b64u_enc(json_encode(['type' => 'webauthn.create', 'challenge' => $chal, 'origin' => $o['origin'] ?? $ORIGIN])), 'attestationObject' => b64u_enc(cbor_enc(['fmt' => 'none', 'attStmt' => [], 'authData' => new B($ad)])), 'transports' => ['internal']];
+};
+$loginIn = function ($key, string $credId, array $o = []) use ($ORIGIN, $RPID, $authData) {
+    $opts = webauthn_login_options(); $cdj = json_encode(['type' => 'webauthn.get', 'challenge' => $o['challenge'] ?? $opts['challenge'], 'origin' => $o['origin'] ?? $ORIGIN]);
+    $ad = $authData($o['rp'] ?? $RPID, $o['flags'] ?? 0x05, $o['count'] ?? 1); openssl_sign($ad . hash('sha256', $cdj, true), $sig, $o['signWith'] ?? $key, OPENSSL_ALGO_SHA256);
+    return ['id' => b64u_enc($credId), 'clientDataJSON' => b64u_enc($cdj), 'authenticatorData' => b64u_enc($ad), 'signature' => b64u_enc($sig), 'userHandle' => $o['handle'] ?? ''];
+};
+$PK = create_user('pk@x.test', 'Passkey Pat', 'password-12345'); $pkU = ['id' => $PK, 'email' => 'pk@x.test', 'name' => 'Passkey Pat'];
+
+section('passkeys: CBOR and keys');
+$o = 0; $m = cbor_decode(cbor_enc(['fmt' => 'none', 'n' => -7, 'a' => [1, 2], 'b' => new B('xy')]), $o); eq([$m['fmt'], $m['n'], $m['a'], $m['b']], ['none', -7, [1, 2], 'xy'], 'CBOR maps, negatives, arrays and byte strings decode');
+throws(fn() => cbor_decode("\xff\xff"), 'passkey', 'garbage CBOR is rejected, not trusted'); throws(fn() => cbor_decode(str_repeat("\x81", 40)), 'passkey', 'deeply nested CBOR is rejected');
+[$ec, $cose] = $newEc(); $o2 = 0; [$pem, $alg] = cose_to_pem(cbor_decode(cbor_enc($cose), $o2)); eq($alg, -7, 'ES256 COSE key parsed'); check('PEM is a usable public key', openssl_pkey_get_public($pem) !== false);
+throws(fn() => cose_to_pem([1 => 1, 3 => -8]), 'not supported', 'unsupported key types refused');
+
+section('passkeys: registration');
+$cred1 = random_bytes(32); $in = $regIn($pkU, $cose, $cred1); eq(webauthn_register_verify($pkU, $in) > 0, true, 'a valid passkey registers'); eq((int) val('SELECT alg FROM {passkeys} WHERE user_id=?', [$PK]), -7, 'algorithm stored');
+throws(fn() => webauthn_register_verify($pkU, $in), 'expired', 'the challenge is single-use (replay refused)');
+throws(fn() => webauthn_register_verify($pkU, $regIn($pkU, $cose, $cred1)), 'already registered', 'the same credential cannot be added twice');
+[, $c2] = $newEc(); throws(fn() => webauthn_register_verify($pkU, $regIn($pkU, $c2, random_bytes(32), ['origin' => 'https://evil.test'])), 'different website', 'wrong origin refused');
+throws(fn() => webauthn_register_verify($pkU, $regIn($pkU, $c2, random_bytes(32), ['rp' => 'evil.test'])), 'different website', 'wrong relying-party hash refused');
+throws(fn() => webauthn_register_verify($pkU, $regIn($pkU, $c2, random_bytes(32), ['challenge' => b64u_enc(random_bytes(32))])), 'does not match', 'a challenge we did not issue is refused');
+throws(fn() => webauthn_register_verify($pkU, $regIn($pkU, $c2, random_bytes(32), ['flags' => 0x40])), 'present', 'user-presence flag is required');
+$tampered = $regIn($pkU, $c2, random_bytes(32)); $_SESSION['wa']['t'] = time() - 400; throws(fn() => webauthn_register_verify($pkU, $tampered), 'expired', 'an old challenge (over 5 minutes) is refused');
+[$rsa, $rcose] = $newRsa(); $cred2 = random_bytes(32); webauthn_register_verify($pkU, $regIn($pkU, $rcose, $cred2)); eq((int) val('SELECT alg FROM {passkeys} WHERE credential_id=?', [$cred2]), -257, 'RS256 passkeys are supported too');
+$ex = webauthn_register_options($pkU)['excludeCredentials']; eq(count($ex), 2, 'existing passkeys are excluded so a device is not enrolled twice');
+
+section('passkeys: sign in');
+run('DELETE FROM {login_attempts}'); eq(webauthn_login_verify($loginIn($ec, $cred1)), $PK, 'a valid assertion signs the right person in'); eq((int) val('SELECT sign_count FROM {passkeys} WHERE credential_id=?', [$cred1]), 1, 'sign counter advances');
+$a = $loginIn($ec, $cred1, ['count' => 2]); webauthn_login_verify($a); throws(fn() => webauthn_login_verify($a), 'expired', 'an assertion cannot be replayed');
+throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 2])), 'cloned', 'a sign counter that does not go up is treated as a cloned key');
+[$other] = $newEc(); throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 9, 'signWith' => $other])), 'signature', 'a signature from a different key is refused');
+throws(fn() => webauthn_login_verify($loginIn($ec, random_bytes(32), ['count' => 9])), 'not registered', 'an unknown credential is refused');
+throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 9, 'flags' => 0x01])), 'verify you', 'user verification (biometric / PIN) is required');
+throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 9, 'origin' => 'https://evil.test'])), 'different website', 'phishing origin refused');
+throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 9, 'rp' => 'evil.test'])), 'different website', 'wrong RP id refused');
+throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 9, 'handle' => b64u_enc('u99999')])), 'does not belong', 'a mismatching user handle is refused');
+eq(webauthn_login_verify($loginIn($rsa, $cred2, ['count' => 3])), $PK, 'RS256 assertions verify');
+run("UPDATE {users} SET status='disabled' WHERE id=?", [$PK]); throws(fn() => webauthn_login_verify($loginIn($ec, $cred1, ['count' => 20])), 'disabled', 'a disabled account cannot use a passkey'); run("UPDATE {users} SET status='active' WHERE id=?", [$PK]);
+eq(count(webauthn_login_options('pk@x.test')['allowCredentials']), 2, 'with an email, only that person’s passkeys are offered'); eq(webauthn_login_options('nobody@x.test')['allowCredentials'], [], 'an unknown email reveals nothing');
+run('DELETE FROM {login_attempts}'); $thr = 0; for ($i = 0; $i < 25; $i++) { try { webauthn_login_verify($loginIn($ec, random_bytes(32))); } catch (UserError $e) { if (str_contains($e->getMessage(), 'Too many')) { $thr++; } } } check('repeated failures are throttled', $thr > 0); run('DELETE FROM {login_attempts}');
+
+
+section('offline sync');
+$accM = (int) val('SELECT id FROM {accounts} WHERE user_id=? ORDER BY id LIMIT 1', [$M]);
+$op = fn(string $uid, array $d) => ['uid' => $uid, 'kind' => 'transaction', 'data' => $d + ['type' => 'expense', 'amount' => '250.50', 'date' => '2026-10-15', 'account_id' => (string) $accM, 'description' => 'Offline chai', 'id' => '999']];
+$r = sync_apply_ops($momU, [$op('aaaaaaaa-0001', [])]); eq($r[0]['ok'], true, 'queued transaction is applied');
+eq((int) val("SELECT amount FROM {transactions} WHERE user_id=? AND description='Offline chai'", [$M]), 25050, 'amount stored exactly in paise'); eq((int) val("SELECT COUNT(*) FROM {transactions} WHERE id=999"), 0, 'client-supplied id is ignored (create only, never overwrite)');
+$r = sync_apply_ops($momU, [$op('aaaaaaaa-0001', [])]); eq($r[0]['duplicate'] ?? false, true, 'retrying the same change is recognised'); eq((int) val("SELECT COUNT(*) FROM {transactions} WHERE user_id=? AND description='Offline chai'", [$M]), 1, 'a retry never creates a duplicate record');
+$r = sync_apply_ops($momU, [$op('aaaaaaaa-0002', ['amount' => '0'])]); eq([$r[0]['ok'], $r[0]['final']], [false, true], 'invalid change is rejected as final with a reason'); check('rejection carries a readable message', $r[0]['error'] !== '');
+eq((int) val("SELECT COUNT(*) FROM {sync_ops} WHERE client_uid='aaaaaaaa-0002'"), 0, 'a rejected change can be corrected and re-sent'); eq(sync_apply_ops($momU, [['uid' => '../../x', 'kind' => 'transaction', 'data' => []]])[0]['ok'], false, 'malformed change id rejected');
+$other = sync_apply_ops($admU, [$op('aaaaaaaa-0003', [])]); eq($other[0]['ok'], false, "a change cannot use another person's account"); eq(sync_apply_ops($momU, [['uid' => 'aaaaaaaa-0004', 'kind' => 'delete_everything', 'data' => []]])[0]['ok'], false, 'unsupported operations are refused');
+
+section('intro screen rule (after 5 days of use, at most twice that day)');
+$I = create_user('intro@x.test', 'Intro', 'password-12345'); $iu = ['id' => $I, 'role' => 'user']; start_session();
+$open = function () use ($iu) { unset($_SESSION['intro_pending']); $_SESSION['last_seen'] = 0; return track_app_open($iu); }; // unset = the person dismissed the previous intro
+for ($k = 4; $k >= 1; $k--) { run('INSERT INTO {usage_days} (user_id, day, opens) VALUES (?,?,1)', [$I, day_after_n(today(), -$k)]); }
+eq($open(), true, 'opening the app on the 5th day of use shows the intro'); $_SESSION['last_seen'] = time(); eq(track_app_open($iu), true, 'a reload before dismissing keeps showing the same intro (not consumed)'); eq(val('SELECT intro_shown FROM {preferences} WHERE user_id=?', [$I]), 1, 'reloading does not use up the second showing'); eq($open(), true, 'a second open the same day shows it once more'); eq($open(), false, 'a third open the same day does not');
+eq(val('SELECT intro_shown FROM {preferences} WHERE user_id=?', [$I]), 2, 'shown twice, never again'); run('UPDATE {preferences} SET intro_first_day=? WHERE user_id=?', [day_after_n(today(), -1), $I]); eq($open(), false, 'never on a later day');
+$_SESSION['last_seen'] = time(); eq(track_app_open($iu), false, 'reloads within the same visit do not count as opening the app');
+$J = create_user('intro2@x.test', 'Intro2', 'password-12345'); $ju = ['id' => $J, 'role' => 'user']; $_SESSION['last_seen'] = 0; eq(track_app_open($ju), false, 'a brand-new account sees no intro on day 1');
+$_SESSION = [];
+
+
+section('single-page router and jelly tabs');
+unset($_SERVER['HTTP_X_MFNC_SPA']); check('a normal request is not a router request', !is_spa());
+$_SERVER['HTTP_X_MFNC_SPA'] = '1'; check('the router header is recognised', is_spa()); unset($_SERVER['HTTP_X_MFNC_SPA']);
+$jh = jelly(['a' => ['label' => 'One', 'href' => '/x'], 'b' => ['label' => 'Two', 'href' => '/y']], 'b', ['label' => 'Pick']);
+check('jelly renders a radiogroup with the active chip checked', str_contains($jh, 'role="radiogroup"') && str_contains($jh, 'data-value="b" tabindex="0"') && substr_count($jh, 'aria-checked="true"') === 1);
+check('jelly link chips are anchors and escape labels', str_contains($jh, '<a href="/x"') && !str_contains(jelly(['a' => ['label' => '<b>x</b>']], 'a'), '<b>x</b>'));
+echo "\n" . ($fail ? "FAILED: $fail failed, $pass passed\n" : "OK: $pass passed\n");
+exit($fail ? 1 : 0);

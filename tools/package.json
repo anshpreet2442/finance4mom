@@ -1,0 +1,11 @@
+{
+  "name": "mfnc-assets",
+  "private": true,
+  "description": "Build tooling only. The deployed app needs just PHP + MySQL; assets/app.css is pre-built.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./input.css -o ../assets/app.css --minify",
+    "watch:css": "tailwindcss -i ./input.css -o ../assets/app.css --watch",
+    "icons": "node copy-icons.mjs"
+  },
+  "devDependencies": { "tailwindcss": "^4", "@tailwindcss/cli": "^4", "lucide-static": "latest" }
+}
