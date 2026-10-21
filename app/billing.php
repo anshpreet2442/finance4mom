@@ -79,7 +79,8 @@ function notify_charge(int $uid, int $chargeId, string $kind, ?array $c = null):
     $c ??= one('SELECT * FROM {charges} WHERE id=? AND user_id=?', [$chargeId, $uid]); if (!$c) { return; }
     $title = $kind === 'new' ? 'New charge: ' . $c['title'] : $c['title'] . ' is overdue';
     $body = $kind === 'new' ? fmt_inr(charge_payable($c)) . ' due on ' . date_label($c['due_date']) . '.' : fmt_inr(charge_payable($c)) . ' was due on ' . date_label($c['due_date']) . '. Pay it on the Dues page.';
-    run('INSERT INTO {notifications} (user_id,dedupe_key,kind,title,body,due_date) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title), body=VALUES(body)', [$uid, "charge:$chargeId:$kind", $kind === 'new' ? 'due' : 'overdue', $title, $body, $c['due_date']]);
+    $fresh = run('INSERT INTO {notifications} (user_id,dedupe_key,kind,title,body,due_date) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title), body=VALUES(body)', [$uid, "charge:$chargeId:$kind", $kind === 'new' ? 'due' : 'overdue', $title, $body, $c['due_date']]);
+    if ($fresh === 1 && $c['status'] === 'pending' && sms_cfg()['auto']) { sms_charge_alert($uid, $c, $kind === 'new' ? 'charge.new' : 'charge.overdue'); } // first time only: the notification row is the de-duplication
 }
 /** 0 = fine, 1 = reminder, 2 = restricted (read-only), 3 = locked (Dues page only). Admins and exempt users are always 0. */
 function billing_level(array $user, ?string $today = null): int {
@@ -132,7 +133,7 @@ function admin_charge_action(int $chargeId, string $action, ?string $note): stri
     run("UPDATE {charges} SET status=?, note=?, paid_at=" . ($st === 'paid' ? 'UTC_TIMESTAMP()' : 'NULL') . ", paid_via=" . ($st === 'paid' ? "'manual'" : 'NULL') . " WHERE id=? AND status='pending'", [$st, $note, $chargeId]);
     run("UPDATE {payments} SET status='cancelled' WHERE charge_id=? AND status='pending'", [$chargeId]);
     run('DELETE FROM {notifications} WHERE user_id=? AND dedupe_key IN (?,?)', [$c['user_id'], "charge:$chargeId:overdue", "charge:$chargeId:new"]); // the reminders no longer apply
-    audit($audit, "charge#$chargeId", (string) $note); return $msg;
+    audit($audit, "charge#$chargeId", (string) $note); if ($st === 'paid') { after_charge_paid($chargeId, 'received outside the app'); } return $msg;
 }
 
 // ============================ gateway client ============================
@@ -189,6 +190,19 @@ function start_payment(int $uid, int $chargeId): string {
 }
 /** Marks a charge paid exactly once, from a verified capture. Safe to call repeatedly. */
 function settle_capture(array $pay, ?string $gatewayPaymentId, ?string $method): string {
+    $res = settle_capture_tx($pay, $gatewayPaymentId, $method);
+    if ($res === 'paid') { after_charge_paid((int) $pay['charge_id'], 'the payment gateway'); }
+    return $res;
+}
+/** Runs once when a charge becomes paid: grants plans / credits top-ups and sends the receipt email. */
+function after_charge_paid(int $chargeId, string $via): void {
+    try {
+        $c = one('SELECT * FROM {charges} WHERE id=?', [$chargeId]); if (!$c) { return; }
+        apply_charge_effects($c);
+        notify_email((int) $c['user_id'], 'payment.received', ['title' => $c['title'], 'amount' => fmt_inr(charge_payable($c)), 'date' => date_label(today()), 'method' => $via, 'link' => abs_url('/dues')], null, false);
+    } catch (Throwable $e) { log_error($e); }
+}
+function settle_capture_tx(array $pay, ?string $gatewayPaymentId, ?string $method): string {
     return tx(function () use ($pay, $gatewayPaymentId, $method) {
         $changed = run("UPDATE {payments} SET status='captured', gateway_payment_id=COALESCE(?, gateway_payment_id), method=COALESCE(?, method), captured_at=COALESCE(captured_at, UTC_TIMESTAMP()), error=NULL WHERE id=? AND status<>'captured'", [$gatewayPaymentId, $method, $pay['id']]);
         $charge = one('SELECT * FROM {charges} WHERE id=? FOR UPDATE', [$pay['charge_id']]);

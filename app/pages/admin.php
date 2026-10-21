@@ -2,9 +2,9 @@
 declare(strict_types=1);
 
 function admin_tabs(string $active): string {
-    $tabs = ['overview' => ['/admin', 'Overview', 'layout-dashboard'], 'users' => ['/admin/users', 'Users', 'users'], 'billing' => ['/admin/billing', 'Billing', 'hand-coins'], 'settings' => ['/admin/settings', 'Site settings', 'sliders-horizontal'], 'activity' => ['/admin/activity', 'Activity log', 'history'], 'system' => ['/admin/system', 'System', 'server']];
+    $tabs = ['overview' => ['/admin', 'Overview', 'layout-dashboard'], 'users' => ['/admin/users', 'Users', 'users'], 'billing' => ['/admin/billing', 'Billing', 'hand-coins'], 'settings' => ['/admin/settings', 'Site settings', 'sliders-horizontal'], 'activity' => ['/admin/activity', 'Activity log', 'history'], 'features' => ['/admin/features', 'Plans & usage', 'coins'], 'email' => ['/admin/email', 'Email', 'mail'], 'sms' => ['/admin/sms', 'SMS', 'smartphone'], 'ai' => ['/admin/ai', 'AI agent', 'sparkles'], 'system' => ['/admin/system', 'System', 'server']];
     $items = []; foreach ($tabs as $k => [$href, $label, $ic]) { $items[$k] = ['label' => $label, 'href' => url($href), 'icon' => $ic]; }
-    return '<div class="mb-6">' . jelly($items, $active, ['label' => 'Admin sections']) . '</div>';
+    return '<div class="mb-6 max-w-full overflow-x-auto overscroll-x-contain pb-1" data-scroll-active>' . jelly($items, $active, ['label' => 'Admin sections']) . '</div>';
 }
 function admin_start(string $title, string $tab): void {
     $u = require_admin();

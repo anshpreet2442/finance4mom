@@ -10,7 +10,7 @@
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var NOSPA = /^\/(transactions\/export|settings\/backup|sw\.js|manifest\.webmanifest|webhooks|webauthn|sync|api|credits|offline|login|register|logout|assets)(\/|$)/;
   var NOSPA_POST = /^\/do\/(logout|login|register|forgot|reset)/;
-  var SWAPS = ['header.topbar', '#mf-nav', '#mf-banner', '#mf-pill', '#main'];
+  var SWAPS = ['header.topbar', '#mf-nav', '#mf-banner', '#mf-pill', '#mf-dock', '#main'];
   var activeVT = null, cur = location.pathname + location.search, ctl = null, seq = 0, cache = {}, bar = null, barTimer = 0;
   try { history.scrollRestoration = 'manual'; } catch (e) {}
 
@@ -58,6 +58,8 @@
       var a = d.querySelector(sel), b = doc.querySelector(sel);
       if (a && b) a.replaceWith(d.importNode(b, true)); else if (a && !b && sel !== '#main') a.remove();
     });
+    if (!d.getElementById('mf-dock') && doc.getElementById('mf-dock')) body.appendChild(d.importNode(doc.getElementById('mf-dock'), true));
+    body.classList.toggle('has-dock', doc.body.classList.contains('has-dock'));
     var tx = d.getElementById('tx-dialog'), ntx = doc.getElementById('tx-dialog'); if (tx && ntx && !tx.open) tx.replaceWith(d.importNode(ntx, true));
     var b1 = d.querySelector('#confirm-form [name=_back]'), b2 = doc.querySelector('#confirm-form [name=_back]'); if (b1 && b2) b1.value = b2.value;
     ['data-csrf', 'data-passkeys', 'data-locale', 'data-symbol'].forEach(function (a) { if (doc.body.hasAttribute(a)) body.setAttribute(a, doc.body.getAttribute(a)); });

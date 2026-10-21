@@ -48,6 +48,7 @@ function empty_state(string $title, string $text = '', string $cta = '', string 
     return '<div class="empty"><span class="empty-ic">' . icon($ic, 'size-6') . '</span><p class="font-semibold">' . e($title) . '</p>' . ($text ? '<p class="max-w-md text-sm text-mute">' . $text . '</p>' : '') . $cta . '</div>';
 }
 function page_header(string $title, string $sub = '', string $actions = ''): void {
+    $actions = dock_pin_button() . $actions;
     echo '<div class="mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">' . e($title) . '</h1>' . ($sub ? '<p class="mt-1 text-sm text-mute">' . e($sub) . '</p>' : '') . '</div>' . ($actions ? '<div class="flex flex-wrap items-center gap-2">' . $actions . '</div>' : '') . '</div>';
 }
 function btn(string $label, string $href, string $cls = 'btn', string $ic = ''): string { return '<a href="' . e($href) . '" class="' . $cls . '">' . ($ic ? icon($ic, 'size-4') : '') . $label . '</a>'; }
@@ -175,6 +176,7 @@ function tx_dialog(array $s): string {
     <div data-show="refund" class="col-span-2 hidden"><?= field(['name' => 'refund_of', 'label' => 'Refund of (optional)', 'type' => 'select', 'options' => $expenses, 'empty' => 'Not linked to an expense']) ?></div>
     <?php if ($funds): ?><div data-show="expense" class="col-span-2"><?= field(['name' => 'fund_goal_id', 'label' => 'Pay from personal fund', 'type' => 'select', 'options' => $funds, 'empty' => 'No, from my account balance']) ?></div><?php endif; ?>
     <?= field(['name' => 'notes', 'label' => 'Notes (optional)', 'type' => 'textarea']) ?>
+    <?php if ($rc = receipt_fields()): ?><div data-show="expense" class="col-span-2 flex flex-col gap-2" data-receipt><?= form_fields($rc) ?></div><?php endif; ?>
     <label data-show="income expense" class="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" name="planned" value="1" class="size-4 accent-[var(--lime-dk)]"> <span data-planned-label>Not paid yet (planned expense)</span></label>
     <div class="col-span-2 mt-1 flex items-center justify-between gap-2"><button type="button" id="tx-delete" class="btn btn-ghost text-neg hidden" data-confirm data-action="<?= e(url('/do/transaction-delete')) ?>" data-fields="{}" data-title="Delete transaction?" data-message="This permanently removes it and updates your balances." data-label="Delete"><?= icon('trash-2', 'size-4') ?> Delete</button><button type="submit" class="btn btn-primary ml-auto" data-tx-submit>Add transaction</button></div>
   </form></div></dialog>
@@ -240,6 +242,8 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
         $showIntro = $_SERVER['REQUEST_METHOD'] === 'GET' && !is_spa() && track_app_open($u) && $active !== 'credits';
         billing_sync((int) $u['id']); $level = billing_level($u); $owed = outstanding_total((int) $u['id']);
         $dueCount = (int) val("SELECT COUNT(*) FROM {charges} WHERE user_id=? AND status='pending' AND due_date <= ?", [$u['id'], day_after_n(today(), 3)]);
+        $GLOBALS['__badges'] = ['bills' => $overdue, 'dues' => $dueCount]; $GLOBALS['__layout_extra'] = ['active' => $active];
+        $GLOBALS['__dock'] = dock_html($u);
     }
     $notice = site_setting('site_notice'); $flash = take_flash();
     $toasts = array_map(function ($f) { [$t, $m] = $f; $short = mb_strlen($m) <= 44; return ['type' => $t === 'err' ? 'err' : ($t === 'info' ? 'info' : 'ok'), 'title' => $f[2] ?? ($short ? rtrim($m, '.') : ($t === 'err' ? 'Something needs attention' : 'All set')), 'text' => ($f[2] ?? null) || !$short ? $m : '']; }, $flash);
@@ -253,9 +257,9 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
 <link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <script>try{var d=document.documentElement;d.classList.add('js');var t=localStorage.getItem('mfnc-theme')||d.dataset.theme;if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');var p=localStorage.getItem('mfnc-palette');if(p)d.setAttribute('data-palette',p);<?php if ($s): ?>if(!sessionStorage.getItem('mfnc-seen')||sessionStorage.getItem('mfnc-reload'))d.classList.add('has-splash');<?php endif; ?>}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('ext.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
 </head>
-<body class="bg-page text-ink antialiased" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
+<body class="bg-page text-ink antialiased<?= !empty($GLOBALS['__dock']) ? ' has-dock' : '' ?>" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-card">Skip to content</a>
 <?php if ($s): ?>
 <div id="splash" class="splash" aria-hidden="true">
@@ -346,8 +350,9 @@ function layout_end(): void {
         // pending-sync bar content (shown by JS)
         echo '<template id="pending-tpl"></template>';
     }
+    if (!empty($GLOBALS['__dock'])) { echo $GLOBALS['__dock']; }
     if ($x['intro']) { echo intro_html(); }
-    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script></body></html>';
+    echo '<script src="' . e(asset('sync.js')) . '"></script><script src="' . e(asset('slosh.js')) . '" defer></script><script src="' . e(asset('jelly.js')) . '" defer></script><script src="' . e(asset('passkey.js')) . '" defer></script><script src="' . e(asset('app.js')) . '" defer></script><script src="' . e(asset('spa.js')) . '" defer></script><script src="' . e(asset('pwa.js')) . '" defer></script><script src="' . e(asset('swiperow.js')) . '" defer></script><script src="' . e(asset('dock.js')) . '" defer></script><script src="' . e(asset('starborder.js')) . '" defer></script></body></html>';
 }
 function render_error(int $code, string $title, string $msg): void {
     http_response_code($code);

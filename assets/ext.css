@@ -1,0 +1,66 @@
+/* Moms Finance — dock, swipe rows, star-border button and small shared bits. Hand-written (no build step); uses the app's CSS variables. */
+
+/* ---------------- Dock (desktop only) ---------------- */
+.mf-dock { position: fixed; left: 0; right: 0; bottom: 10px; z-index: 35; display: none; justify-content: center; pointer-events: none; }
+@media (min-width: 1024px) and (hover: hover) { .mf-dock { display: flex; } body.has-dock #main { padding-bottom: 8.5rem; } }
+.mf-dock__panel { pointer-events: auto; display: flex; align-items: flex-end; gap: var(--dock-gap, 10px); height: var(--dock-h, 68px); padding: 0 12px 9px; border-radius: 26px; background: color-mix(in srgb, var(--card) 78%, transparent); border: 1px solid var(--line); box-shadow: 0 18px 40px -18px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.06); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); }
+.mf-dock__item { position: relative; display: flex; flex: none; align-items: center; justify-content: center; width: 50px; height: 50px; color: var(--ink); text-decoration: none; outline: none; }
+.mf-dock__tile { position: relative; display: grid; place-items: center; width: 100%; height: 100%; border-radius: 25px; background: var(--soft); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background-color .2s, box-shadow .2s; }
+.mf-dock__item:hover .mf-dock__tile, .mf-dock__item:focus-visible .mf-dock__tile { background: var(--card); box-shadow: 0 6px 16px -6px rgba(0,0,0,.35); }
+.mf-dock__item:focus-visible .mf-dock__tile { outline: 2px solid var(--lime-dk); outline-offset: 2px; }
+.mf-dock__item.is-active .mf-dock__tile { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.mf-dock__icon { width: 46%; height: 46%; }
+.mf-dock__dot { position: absolute; left: 50%; bottom: -7px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--lime-dk); opacity: 0; transform: scale(.4); transition: opacity .2s, transform .2s; }
+.mf-dock__item.is-active .mf-dock__dot { opacity: 1; transform: none; }
+.mf-dock__badge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--neg); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card); }
+.mf-dock__label { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translate(-50%, 4px); padding: 4px 10px; border-radius: 8px; background: var(--ink); color: var(--card); font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+.mf-dock__item:hover .mf-dock__label, .mf-dock__item:focus-visible .mf-dock__label { opacity: 1; transform: translate(-50%, 0); }
+.mf-dock__item.is-bounce .mf-dock__tile { animation: mf-dock-bounce .6s cubic-bezier(.28,.84,.42,1); }
+@keyframes mf-dock-bounce { 0% { transform: translateY(0); } 28% { transform: translateY(-22px); } 52% { transform: translateY(0); } 70% { transform: translateY(-9px); } 86% { transform: translateY(0); } 93% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+.mf-dock__menu { pointer-events: auto; position: absolute; bottom: calc(var(--dock-h, 68px) + 14px); min-width: 140px; padding: 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--line-strong); box-shadow: 0 16px 36px -10px rgba(0,0,0,.4); }
+.mf-dock { }
+.mf-dock > .mf-dock__menu { position: absolute; }
+.mf-dock__menu[hidden] { display: none; }
+.mf-dock__menu a, .mf-dock__menu button { display: block; width: 100%; padding: 9px 12px; border-radius: 9px; border: 0; background: none; text-align: left; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; text-decoration: none; }
+.mf-dock__menu a:hover, .mf-dock__menu button:hover, .mf-dock__menu a:focus-visible, .mf-dock__menu button:focus-visible { background: var(--soft); outline: none; }
+.mf-dock__menu button[data-act=unpin] { color: var(--neg); }
+@media (prefers-reduced-motion: reduce) { .mf-dock__item.is-bounce .mf-dock__tile { animation: none; } .mf-dock__dot, .mf-dock__label { transition: none; } }
+
+/* ---------------- Swipe rows ---------------- */
+.swipe-list { list-style: none; margin: 0; padding: 0; }
+.swipe-row { position: relative; overflow: hidden; background: var(--card); border-radius: 0; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.swipe-list > .swipe-row + .swipe-row { border-top: 1px solid var(--line); }
+.swipe-row__content { position: relative; z-index: 1; background: var(--card); touch-action: pan-y; will-change: transform; outline: none; }
+.swipe-row__content:focus-visible { box-shadow: inset 0 0 0 2px var(--lime-dk); }
+.swipe-row.is-dragging .swipe-row__content { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+.swipe-row__actions { position: absolute; top: 0; bottom: 0; display: flex; visibility: hidden; }
+.swipe-row.is-start .swipe-row__actions--start, .swipe-row.is-end .swipe-row__actions--end, .swipe-row[data-open] .swipe-row__actions { visibility: visible; }
+.swipe-row__actions--start { left: 0; } .swipe-row__actions--end { right: 0; }
+.swipe-row.is-start .swipe-row__actions--end, .swipe-row.is-end .swipe-row__actions--start { visibility: hidden; }
+.swipe-row__actions form { display: flex; margin: 0; }
+.swipe-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 76px; height: 100%; padding: 0 14px; border: 0; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; background: #6b6b66; }
+.swipe-act svg { width: 20px; height: 20px; }
+.swipe-act--danger { background: var(--neg); } .swipe-act--ok { background: var(--lime-dk); } .swipe-act--warn { background: var(--orange-dk); } .swipe-act--dark { background: #1b1b1b; } .swipe-act--primary { background: #2f6fed; }
+.swipe-act:focus-visible { outline: 3px solid #fff; outline-offset: -5px; }
+.swipe-hint { display: none; }
+@media (hover: none) { .swipe-hint { display: block; } }
+@media (prefers-reduced-motion: reduce) { .swipe-row__content { transition: none !important; } }
+
+/* ---------------- StarBorder button (port of the React StarBorder) ----------------
+   Custom properties (set from data attributes by starborder.js, same names as the props):
+   --sb-color, --sb-duration (s), --sb-trail (0..1), --sb-thickness (px), --sb-radius (px), --sb-glow (0..1) */
+@property --sb-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.star-border { --sb-color: #fff; --sb-duration: 4s; --sb-trail: .3; --sb-thickness: 1px; --sb-radius: 12px; --sb-glow: .6; --sb-bg: #0b0b0d; --sb-fg: #fff; position: relative; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--sb-radius); padding: var(--sb-thickness); background: transparent; color: var(--sb-fg); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; isolation: isolate; overflow: visible; -webkit-tap-highlight-color: transparent; }
+.star-border[data-theme=light] { --sb-bg: #ffffff; --sb-fg: #111; }
+.star-border__ring, .star-border__glow { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1; --sb-lit: calc(var(--sb-trail) * 100%); background: conic-gradient(from var(--sb-a), transparent 0, transparent calc(100% - var(--sb-lit) - 2%), color-mix(in srgb, var(--sb-color) 12%, transparent) calc(100% - var(--sb-lit)), var(--sb-color) 99.5%, transparent 100%); animation: sb-spin var(--sb-duration) linear infinite; }
+.star-border__glow { filter: blur(calc(6px + 10px * var(--sb-glow))); opacity: calc(var(--sb-glow) * .85); inset: -2px; }
+.star-border__base { position: absolute; inset: 0; border-radius: inherit; z-index: -2; background: color-mix(in srgb, var(--sb-color) 22%, transparent); }
+.star-border__inner { position: relative; display: inline-flex; align-items: center; gap: .5rem; padding: .85rem 1.6rem; border-radius: calc(var(--sb-radius) - var(--sb-thickness)); background: var(--sb-bg); min-height: 44px; }
+.star-border:hover .star-border__ring, .star-border.is-lap .star-border__ring, .star-border:hover .star-border__glow { animation-duration: calc(var(--sb-duration) / 3); }
+.star-border:focus-visible { outline: 2px solid var(--sb-color); outline-offset: 3px; }
+.star-border__pulse { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; border: 2px solid var(--sb-color); opacity: 0; }
+.star-border.is-pulse .star-border__pulse { animation: sb-pulse .6s ease-out; }
+@keyframes sb-spin { to { --sb-a: 360deg; } }
+@keyframes sb-pulse { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18, 1.5); } }
+@media (prefers-reduced-motion: reduce) { .star-border__ring, .star-border__glow { animation: none; } .star-border.is-pulse .star-border__pulse { animation: none; } }
+@supports not (background: conic-gradient(from 0deg, red, blue)) { .star-border__ring, .star-border__glow { display: none; } .star-border__base { background: var(--sb-color); opacity: .5; } }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/config.php';
 
 foreach (glob(__DIR__ . '/app/pages/*.php') as $f) { require_once $f; }
-require_once __DIR__ . '/app/actions.php';
+require_once __DIR__ . '/app/actions.php'; require_once __DIR__ . '/app/actions_ext.php';
 
 set_exception_handler(function (Throwable $e) {
     log_error($e);
@@ -84,6 +84,7 @@ $routes = [
     '/analysis' => 'page_analysis', '/accounts' => 'page_accounts', '/dues' => 'page_dues', '/dues/return' => 'page_dues_return', '/admin/billing' => 'page_admin_billing',
     '/manifest.webmanifest' => 'page_manifest', '/api/pulse' => 'page_pulse', '/sw.js' => 'page_sw', '/offline' => 'page_offline', '/credits' => 'page_credits',
     '/reports' => 'page_reports', '/settings' => 'page_settings', '/settings/backup' => 'page_backup',
+    '/admin/email' => 'page_admin_email', '/admin/sms' => 'page_admin_sms',
     '/admin' => 'page_admin', '/admin/users' => 'page_admin_users', '/admin/settings' => 'page_admin_settings', '/admin/activity' => 'page_admin_activity', '/admin/system' => 'page_admin_system',
 ];
 if (!in_array(method(), ['GET', 'HEAD'], true)) { http_response_code(405); exit; }

@@ -39,6 +39,14 @@ function page_settings(): void {
     echo '<div data-passkey-ui class="mt-4 hidden flex-wrap items-end gap-2 [&:not(.hidden)]:flex"><div class="min-w-48 flex-1"><label class="label" for="pk-name">Name this passkey</label><input id="pk-name" class="input" maxlength="60" placeholder="e.g. My phone"></div><button type="button" class="btn btn-dark" data-passkey-add>' . icon('plus', 'size-4') . ' Add a passkey</button></div><div id="pk-msg" hidden></div>'
         . '<p data-passkey-ui class="hidden mt-3 text-xs text-mute">Your fingerprint or face never leaves your device. The app stores only a public key.</p><p class="mt-3 hidden text-xs text-mute" id="pk-unsupported">This browser does not support passkeys.</p></div>';
     card_close();
+    $al = one('SELECT phone,email_alerts,sms_alerts FROM {preferences} WHERE user_id=?', [$u['id']]) ?: ['phone' => '', 'email_alerts' => 1, 'sms_alerts' => 0]; $ec = email_cfg(); $sc = sms_cfg();
+    card_open('Alerts', 'Receipts and payment links, only if the administrator has switched them on.');
+    echo simple_form('alerts-save', [
+        ['name' => 'email_alerts', 'label' => 'Email me receipts for payments' . ($ec['enabled'] ? '' : ' (not enabled by the administrator yet)'), 'type' => 'checkbox', 'value' => (bool) $al['email_alerts']],
+        ['name' => 'sms_alerts', 'label' => 'Text me payment links and reminders' . ($sc['enabled'] ? '' : ' (not enabled by the administrator yet)'), 'type' => 'checkbox', 'value' => (bool) $al['sms_alerts']],
+        ['name' => 'phone', 'label' => 'Mobile number', 'type' => 'tel', 'value' => (string) $al['phone'], 'placeholder' => '+919876543210', 'autocomplete' => 'tel', 'hint' => 'Used only for alerts. Include the country code.'],
+    ], 'Save alerts'); card_close();
+    if (feature_on($u, 'dock')) { card_open('Dock', 'Pin pages to the dock at the bottom of the screen on desktop.'); echo dock_manager($u); card_close(); }
     card_open('Profile & security');
     echo simple_form('profile-save', [['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $u['name']]], 'Save name') . '<p class="mt-3 text-xs text-mute">Signed in as ' . e($u['email']) . '</p><hr class="my-5 border-line">'
         . simple_form('password-change', [['name' => 'current', 'label' => 'Current password', 'type' => 'password', 'required' => true, 'autocomplete' => 'current-password'], ['name' => 'next', 'label' => 'New password', 'type' => 'password', 'required' => true, 'hint' => '10 to 72 characters.', 'autocomplete' => 'new-password']], 'Change password')

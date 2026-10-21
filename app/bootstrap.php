@@ -14,7 +14,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('log_errors', '1');
 
-foreach (['db', 'schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ui', 'charts', 'mobile'] as $f) {
+foreach (['db', 'schema', 'helpers', 'engine', 'services', 'snapshot', 'auth', 'webauthn', 'billing', 'ext', 'notify', 'ui', 'charts', 'mobile'] as $f) {
     require_once __DIR__ . "/$f.php";
 }
 

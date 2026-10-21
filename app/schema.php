@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /** All tables, in dependency order. {name} becomes `name` + TABLE_SUFFIX. Money is BIGINT minor units (paise). */
 function mfnc_schema(): array {
@@ -225,6 +225,48 @@ function mfnc_schema(): array {
         UNIQUE KEY uq_cred (credential_id(255)), INDEX idx_pk_user (user_id),
         FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
     ) $t",
+    // ---- v6: dock pins, email/SMS logs, AI agent, entitlements and wallet ----
+    'dock_pins' => "CREATE TABLE IF NOT EXISTS {dock_pins} (
+        user_id INT UNSIGNED NOT NULL, page_key VARCHAR(30) NOT NULL, sort INT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, page_key),
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'email_log' => "CREATE TABLE IF NOT EXISTS {email_log} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NULL, to_email VARCHAR(190) NOT NULL, subject VARCHAR(250) NOT NULL, event VARCHAR(40) NOT NULL DEFAULT '',
+        status ENUM('sent','failed','skipped') NOT NULL, error VARCHAR(400) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_el_time (created_at)
+    ) $t",
+    'sms_log' => "CREATE TABLE IF NOT EXISTS {sms_log} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NULL, to_phone VARCHAR(30) NOT NULL, body VARCHAR(700) NOT NULL, event VARCHAR(40) NOT NULL DEFAULT '',
+        status ENUM('sent','failed','skipped') NOT NULL, sid VARCHAR(60) NULL, error VARCHAR(400) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_sl_time (created_at)
+    ) $t",
+    'ai_profiles' => "CREATE TABLE IF NOT EXISTS {ai_profiles} (
+        user_id INT UNSIGNED PRIMARY KEY, agent_name VARCHAR(40) NULL, avatar_style VARCHAR(30) NOT NULL DEFAULT 'bottts-neutral', stage ENUM('interview','naming','ready') NOT NULL DEFAULT 'interview',
+        qa TEXT NULL, context TEXT NULL, suggested_name VARCHAR(40) NULL,
+        $ts,
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'ai_messages' => "CREATE TABLE IF NOT EXISTS {ai_messages} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, role ENUM('user','assistant') NOT NULL, content MEDIUMTEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_aim_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'ai_actions' => "CREATE TABLE IF NOT EXISTS {ai_actions} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, kind VARCHAR(30) NOT NULL, summary VARCHAR(300) NOT NULL, params TEXT NULL, before_json MEDIUMTEXT NULL, after_json MEDIUMTEXT NULL,
+        status ENUM('applied','undone','failed') NOT NULL DEFAULT 'applied', error VARCHAR(300) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, undone_at DATETIME NULL,
+        INDEX idx_aia_user (user_id, id), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'ai_usage' => "CREATE TABLE IF NOT EXISTS {ai_usage} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, model VARCHAR(60) NOT NULL, input_tokens INT UNSIGNED NOT NULL DEFAULT 0, output_tokens INT UNSIGNED NOT NULL DEFAULT 0,
+        cost_micro BIGINT NOT NULL DEFAULT 0, source ENUM('wallet','budget','mock') NOT NULL DEFAULT 'budget', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_aiu_user (user_id, created_at), FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'wallet_ledger' => "CREATE TABLE IF NOT EXISTS {wallet_ledger} (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, amount_micro BIGINT NOT NULL, kind ENUM('topup','usage','adjust') NOT NULL, note VARCHAR(160) NOT NULL DEFAULT '',
+        ref VARCHAR(40) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_wallet_ref (user_id, ref), INDEX idx_wl_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
+    'entitlements' => "CREATE TABLE IF NOT EXISTS {entitlements} (
+        user_id INT UNSIGNED NOT NULL, feature VARCHAR(30) NOT NULL, valid_until DATE NOT NULL, source VARCHAR(20) NOT NULL DEFAULT 'admin', PRIMARY KEY (user_id, feature),
+        FOREIGN KEY (user_id) REFERENCES {users}(id) ON DELETE CASCADE
+    ) $t",
     ];
 }
 
@@ -255,6 +297,9 @@ function mfnc_migrate(): void {
         ['accounts', 'purpose', "ENUM('spending','income','savings','other') NOT NULL DEFAULT 'spending'"],
         ['accounts', 'label', 'VARCHAR(40) NULL'],
         ['purchases', 'account_id', 'INT UNSIGNED NULL'],
+        ['preferences', 'phone', 'VARCHAR(20) NULL'], ['preferences', 'email_alerts', 'TINYINT(1) NOT NULL DEFAULT 1'], ['preferences', 'sms_alerts', 'TINYINT(1) NOT NULL DEFAULT 0'],
+        ['users', 'ai_budget_micro', 'BIGINT NULL'],
+        ['charges', 'feature', 'VARCHAR(30) NULL'], ['charges', 'feature_days', 'SMALLINT UNSIGNED NULL'], ['charges', 'topup_micro', 'BIGINT NULL'],
     ];
     foreach ($adds as [$t, $c, $def]) { if (!column_exists($t, $c)) { db()->exec(sqlt("ALTER TABLE {{$t}} ADD COLUMN `$c` $def")); } }
     $defaults = ['billing_enabled' => '1', 'grace_days' => '5', 'late_fee_type' => 'none', 'late_fee_flat' => '0', 'late_fee_percent' => '0', 'restrict_after_days' => '14', 'lock_after_days' => '30'];

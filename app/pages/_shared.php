@@ -81,7 +81,7 @@ function pay_button(array $s, array $o, string $label = 'Pay', string $cls = 'bt
         ['name' => 'amount', 'label' => 'Amount (' . fmt($o['outstanding']) . ' due)', 'type' => 'money', 'required' => true, 'value' => money_input($o['outstanding']), 'hint' => 'Pay less to record a partial payment.'],
         ['name' => 'date', 'label' => 'Paid on', 'type' => 'date', 'required' => true, 'value' => $s['today'], 'half' => true],
         ['name' => 'account_id', 'label' => 'Paid from', 'type' => 'select', 'required' => true, 'options' => acct_options($s), 'half' => true, 'value' => $o['bill']['account_id'] ?? ''],
-    ], $saved > 0 ? [['name' => 'from_fund', 'label' => 'Use the ' . fmt($saved) . ' I set aside for this', 'type' => 'checkbox', 'value' => true]] : []), 'Record payment', $cls);
+    ], $saved > 0 ? [['name' => 'from_fund', 'label' => 'Use the ' . fmt($saved) . ' I set aside for this', 'type' => 'checkbox', 'value' => true]] : [], receipt_fields()), 'Record payment', $cls);
 }
 
 // ---------------- recurring templates ----------------

@@ -45,7 +45,9 @@ function do_transaction_save(array $u): string {
         'category_id' => in_opt_id('category_id'), 'description' => in_str('description', 200, false), 'payment_method' => in_opt('payment_method', 40),
         'notes' => in_opt('notes', 500), 'refund_of' => $type === 'refund' ? in_opt_id('refund_of') : null, 'fund_goal_id' => $type === 'expense' ? in_opt_id('fund_goal_id') : null];
     if ($id) { update_transaction((int) $u['id'], $id, $i); return 'Transaction updated.'; }
-    create_transaction((int) $u['id'], $i); return 'Transaction added.';
+    create_transaction((int) $u['id'], $i);
+    if ($type === 'expense' && $status === 'completed' && posted_email_choice() === true) { $a = one('SELECT name FROM {accounts} WHERE id=? AND user_id=?', [$i['account_id'], $u['id']]); notify_email((int) $u['id'], 'tx.payment', ['title' => $i['description'] ?: 'Expense', 'amount' => fmt_inr($amount), 'date' => date_label($i['date']), 'account' => $a ? ' from ' . $a['name'] : '', 'link' => abs_url('/transactions')], true); }
+    return 'Transaction added.';
 }
 function do_transaction_delete(array $u): string { delete_transaction((int) $u['id'], in_id('id')); return 'Transaction deleted.'; }
 function do_transaction_complete(array $u): string { complete_planned((int) $u['id'], in_id('id'), today()); return 'Marked as done.'; }
@@ -147,7 +149,13 @@ function do_bill_save(array $u): string {
     return 'Saved.';
 }
 function do_bill_delete(array $u): string { delete_bill((int) $u['id'], in_id('id')); return 'Deleted.'; }
-function do_bill_pay(array $u): string { pay_occurrence((int) $u['id'], in_id('occurrence_id'), in_money('amount'), in_date('date', 'Paid on'), in_id('account_id', 'account'), in_bool('from_fund')); return 'Payment recorded.'; }
+function do_bill_pay(array $u): string {
+    $amt = in_money('amount'); $acc = in_id('account_id', 'account'); $occ = in_id('occurrence_id'); $date = in_date('date', 'Paid on');
+    pay_occurrence((int) $u['id'], $occ, $amt, $date, $acc, in_bool('from_fund'));
+    $b = one('SELECT b.name FROM {bill_occurrences} o JOIN {bills} b ON b.id=o.bill_id WHERE o.id=? AND o.user_id=?', [$occ, $u['id']]); $a = one('SELECT name FROM {accounts} WHERE id=? AND user_id=?', [$acc, $u['id']]);
+    notify_email((int) $u['id'], 'bill.paid', ['title' => $b['name'] ?? 'a bill', 'amount' => fmt_inr($amt), 'date' => date_label($date), 'account' => $a ? ' from ' . $a['name'] : '', 'link' => abs_url('/bills')], posted_email_choice());
+    return 'Payment recorded.';
+}
 function do_occurrence_skip(array $u): string { skip_occurrence((int) $u['id'], in_id('id'), true); return 'Skipped.'; }
 function do_notifications_read(array $u): string { run('UPDATE {notifications} SET is_read=1 WHERE user_id=?', [$u['id']]); return 'Reminders dismissed.'; }
 
