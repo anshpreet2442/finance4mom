@@ -1,0 +1,25 @@
+# Example server block. Adjust root, php-fpm socket and server_name.
+server {
+    listen 80;
+    server_name finance.example.com;
+    root /var/www/momsfinance;
+    index index.php;
+
+    # never serve code, config or tooling
+    location ~ ^/(app|tools|docs)/ { return 404; }
+    location = /config.php { return 404; }
+    location = /router.php { return 404; }
+    location ~ /\.(?!well-known) { return 404; }
+
+    # static assets
+    location /assets/ { expires 30d; add_header Cache-Control "public"; try_files $uri =404; }
+
+    # pretty URLs: everything else goes to the front controller
+    location / { try_files $uri /index.php?$query_string; }
+
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+}

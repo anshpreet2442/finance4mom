@@ -1,0 +1,56 @@
+/* Circular progress ring (port of MagicUI AnimatedCircularProgressBar). Markup: ring() in app/ring.php or mfRing() in assets/ring.js.
+   Colours come from the app tokens, so light / dark / ember / lime all work; --ring-primary / --ring-secondary override them with any CSS colour. */
+.mf-ring {
+  --ring-size: 96px; --ring-ms: 1s;
+  --ring-tone: var(--lime);                                               /* primary arc by state */
+  --ring-track: color-mix(in srgb, var(--ink) 14%, transparent);          /* the original uses rgba(0,0,0,0.1); a touch stronger so it stays visible on the app's soft cards */
+  --q: var(--p, 0);                                                       /* percent the arc is drawn at (0 until the ring is first seen) */
+  position: relative; display: inline-grid; place-items: center; flex: none; vertical-align: middle;
+  width: var(--ring-size); height: var(--ring-size); aspect-ratio: 1; color: var(--ink); font-weight: 600; transform: translateZ(0);
+}
+.mf-ring[data-state="warn"] { --ring-tone: var(--orange); }
+.mf-ring[data-state="bad"] { --ring-tone: var(--neg); }
+.mf-ring[data-state="done"] { --ring-tone: var(--ink); }
+.mf-ring.is-armed:not(.is-in) { --q: 0; }
+.mf-ring__svg { grid-area: 1 / 1; width: 100%; height: 100%; overflow: visible; }
+.mf-ring__track, .mf-ring__arc { fill: none; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; transform-origin: 50px 50px; }
+.mf-ring__track { stroke: var(--ring-secondary, var(--ring-track)); }
+.mf-ring__arc {
+  stroke: var(--ring-primary, var(--ring-tone));
+  stroke-dasharray: calc(var(--q) * 2.82743px) 282.743px;
+  transform: rotate(-90deg);                                              /* starts at 12 o'clock, runs clockwise */
+  opacity: clamp(0, calc(var(--q) * 50), 1);                              /* 0 % draws nothing (a zero-length round cap would be a dot) */
+  transition: stroke-dasharray var(--ring-ms) ease, stroke var(--ring-ms) ease, opacity .2s linear;
+}
+/* the "split" look of the original: the unused part is a second arc with a 5 % gap on both sides */
+.mf-ring[data-variant="split"] .mf-ring__track { stroke-dasharray: calc(var(--s, 0) * 2.82743px) 282.743px; transform: rotate(252deg) scaleY(-1); transition: stroke-dasharray var(--ring-ms) ease; }
+.mf-ring__v { grid-area: 1 / 1; display: grid; place-items: center; text-align: center; line-height: 1; font-size: max(12px, calc(var(--ring-size) * .22)); font-variant-numeric: tabular-nums lining-nums; letter-spacing: -.02em; white-space: nowrap; }
+.mf-ring__s { display: block; margin-top: 2px; font-size: max(11px, calc(var(--ring-size) * .1)); font-weight: 500; letter-spacing: 0; color: var(--mute); }
+.mf-ring__s:empty { display: none; }
+.mf-ring--has-sub .mf-ring__v { align-content: center; }
+.mf-ring[data-state="bad"] .mf-ring__v { color: var(--neg); }
+.mf-ring[data-state="warn"] .mf-ring__v { color: var(--orange-dk); }
+.mf-ring--xs { --ring-size: 40px; } .mf-ring--sm { --ring-size: 56px; } .mf-ring--md { --ring-size: 80px; } .mf-ring--lg { --ring-size: 120px; } .mf-ring--xl { --ring-size: 160px; }
+.mf-ring--xs .mf-ring__s, .mf-ring--sm .mf-ring__s { display: none; }
+.mf-ring.is-static .mf-ring__arc, .mf-ring.is-static .mf-ring__track { transition: none; }
+@media (prefers-reduced-motion: reduce) { .mf-ring__arc, .mf-ring__track { transition: none !important; } }
+@media print { .mf-ring__arc { transition: none; --q: var(--p) !important; } }
+@media (forced-colors: active) { .mf-ring__track { stroke: GrayText; } .mf-ring__arc { stroke: Highlight; } }
+/* a ring with a caption underneath (dashboard tiles, plan meters) */
+.ring-card { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.ring-card__t { min-width: 0; }
+.ring-card__t b { display: block; font-size: 15px; font-weight: 600; line-height: 1.25; }
+.ring-card__t small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--mute); line-height: 1.35; }
+.ring-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; min-width: 0; }
+.ring-row { display: flex; flex-wrap: wrap; gap: 20px 24px; align-items: flex-start; }
+.ring-list { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ring-chip { display: inline-flex; align-items: center; gap: 10px; }
+/* places that host a ring */
+.ai-chat__tools .ai-budget { display: inline-grid; place-items: center; width: 44px; height: 44px; }
+.imp-rec { position: relative; } .imp-recring { float: right; margin: 0 0 8px 14px; }
+@media (max-width: 480px) { .imp-recring { --ring-size: 64px; } }
+.imp-upring { float: right; margin: 0 0 6px 10px; }
+/* expenses page: one row per category (ring | name and amounts | actions; the actions drop under the name on phones) */
+.exp-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 16px; padding: 14px 0; }
+.exp-row__act { grid-column: 1 / -1; flex-wrap: wrap; }
+@media (min-width: 640px) { .exp-row { grid-template-columns: auto minmax(0, 1fr) auto; } .exp-row__act { grid-column: auto; } }

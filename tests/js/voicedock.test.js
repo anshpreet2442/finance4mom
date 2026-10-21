@@ -1,0 +1,32 @@
+// node tests/js/voicedock.test.js : the pure helpers of assets/voicedock.js (sentence chunker, speakable text, level smoothing, route decision, silence detector)
+const V = require('../../assets/voicedock.js').pure; let bad = 0;
+function t(name, ok, extra) { console.log((ok ? 'ok - ' : 'FAIL - ') + name + (ok ? '' : ' ' + (extra || ''))); if (!ok) bad++; }
+const run = (parts, o) => { const c = V.createChunker(o), out = []; parts.forEach(p => out.push(...c.feed(p))); out.push(...c.flush()); return out; };
+t('the first sentence is released as soon as it is complete', JSON.stringify(run(['Sure. Your rent is high, ', 'and you know it. ']).slice(0, 1)) === '["Sure."]');
+t('nothing is released before a sentence end is confirmed', V.createChunker().feed('Your rent is ₹22,000 and that').length === 0);
+t('a full stop with nothing after it is not yet an end (could be 3.5)', V.createChunker().feed('You saved 3.').length === 0);
+t('decimals and Indian grouping never split', run(['Rent is ₹1,25,000.50 this month, up 3.5 percent. Done. ']).join('|').indexOf('3.5 percent') > 0 && run(['It is 3.5 percent. Fine. ']).length >= 1);
+t('abbreviations do not split', JSON.stringify(run(['Ask Dr. Rao about it. He knows. ', 'Then e.g. save more. '])).includes('Dr. Rao about it'));
+t('list numbering does not split', !run(['1. Pay the rent\n2. Pay the bills\n']).some(c => /^\d\.?$/.test(c.trim())));
+t('short follow-up sentences are joined to a natural length', (() => { const o = run(['Sure. ', 'Ok. ', 'Yes. ', 'This one is a longer sentence that stands alone. ']); return o.length === 2 && o[0] === 'Sure.' && o[1].startsWith('Ok. Yes. This one'); })());
+t('the rest is delivered by flush', JSON.stringify(run(['Hello there. ', 'And the unfinished'])) === '["Hello there.","And the unfinished"]');
+t('chunks come out in order and lose no words', (() => { const txt = 'First one here. Second sentence follows right now. Third and last sentence is a bit longer than the others. Bye.'; const words = s => s.replace(/[^\w ]/g, '').split(/\s+/).filter(Boolean).join(' '); return words(run([txt.slice(0, 20), txt.slice(20, 61), txt.slice(61)]).join(' ')) === words(txt); })());
+t('feeding in tiny pieces gives the same chunks as feeding at once', (() => { const txt = 'Alpha beta gamma. Delta epsilon zeta eta theta iota kappa. Lambda mu.'; const one = run([txt]), many = run(txt.split('')); return JSON.stringify(one) === JSON.stringify(many); })());
+t('a very long run without punctuation is cut at a clause or a space', (() => { const o = run([('word '.repeat(80)) + ', and more words follow here ' + ('x '.repeat(80))]); return o.length >= 2 && o.every(c => c.length <= 300); })());
+t('line breaks end a sentence', run(['Line one\nLine two\n']).length >= 1 && run(['Line one\nLine two\n']).join(' ').includes('Line two'));
+t('speakable removes markdown, links and emoji', V.speakable('## Head\n**Bold** `code` [site](https://x.com) 🎉') === 'Head Bold code site');
+t('speakable says rupees as a word', V.speakable('Pay ₹5,000 now') === 'Pay 5,000 rupees now');
+t('speakable drops list markers and bare urls', V.speakable('- one\n- two https://a.b/c') === 'one two link');
+t('level: silence is 0 and speech is loud, and it is monotonic', V.levelFromRms(0, 0) === 0 && V.levelFromRms(0.2, 0) > V.levelFromRms(0.05, 0) && V.levelFromRms(5, 0) <= 1);
+t('level: quick attack, slow release', (() => { const up = V.levelFromRms(0.3, 0); const down = V.levelFromRms(0, up); return up > 0.3 && down > up * 0.6; })());
+t('condense keeps the peak of every slice and fills 48 bars', (() => { const take = Array.from({ length: 480 }, (_, i) => i === 100 ? 0.9 : 0.2), c = V.condense(take); return c.length === 48 && Math.max(...c) === 0.9 && V.condense([]).length === 48; })());
+t('timer text', V.formatTime(0) === '00:00' && V.formatTime(75) === '01:15' && V.formatTime(3599.9) === '59:59');
+const full = { secure: true, getUserMedia: true, mediaRecorder: true, speechRecognition: true, speechSynthesis: true };
+t('route: ElevenLabs both ways when the server says so and the browser can record', (() => { const r = V.pickRoute({ stt: 'elevenlabs', tts: 'elevenlabs' }, full); return r.stt === 'elevenlabs' && r.tts === 'elevenlabs'; })());
+t('route: device voice when the server says browser', (() => { const r = V.pickRoute({ stt: 'browser', tts: 'browser' }, full); return r.stt === 'browser' && r.tts === 'browser'; })());
+t('route: ElevenLabs speech-to-text falls back to Web Speech without MediaRecorder', V.pickRoute({ stt: 'elevenlabs', tts: 'elevenlabs' }, { ...full, mediaRecorder: false }).stt === 'browser');
+t('route: typing when neither recording nor Web Speech exist', V.pickRoute({ stt: 'browser', tts: 'browser' }, { secure: true, getUserMedia: true, speechSynthesis: true }).stt === 'typed');
+t('route: an insecure page cannot listen at all and says why', (() => { const r = V.pickRoute({ stt: 'elevenlabs', tts: 'elevenlabs' }, { ...full, secure: false }); return r.stt === 'typed' && r.why === 'insecure'; })());
+t('route: no speech synthesis and no ElevenLabs means silent text', V.pickRoute({ stt: 'browser', tts: 'browser' }, { secure: true }).tts === 'none');
+t('vad: quiet before speaking never stops, a pause after speech does', (() => { const v = V.createVad({ holdMs: 1000 }); for (let t = 0; t < 3000; t += 100) if (v(0.01, t)) return false; const w = V.createVad({ holdMs: 1000 }); for (let t = 0; t < 600; t += 100) w(0.5, t); let stopped = false; for (let t = 600; t < 2000; t += 100) if (w(0.01, t)) { stopped = t >= 1500 && t <= 1700; break; } return stopped; })());
+process.exit(bad ? 1 : 0);
