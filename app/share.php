@@ -44,7 +44,7 @@ function share_validate(array $in): array {
     elseif ($e === 'date') { $d = (string) ($in['expires_on'] ?? ''); if (!valid_date($d) || $d < today()) { throw new UserError('Pick an expiry date that is today or later.'); } $exp = gmdate('Y-m-d H:i:s', strtotime($d . ' 23:59:59 ' . APP_TIMEZONE)); }
     elseif ($e !== 'never') { throw new UserError('Unknown expiry option.'); }
     $mv = trim((string) ($in['max_views'] ?? '')); $max = null; if ($mv !== '') { if (!ctype_digit($mv) || (int) $mv < 1 || (int) $mv > 100000) { throw new UserError('Maximum views is a whole number from 1 to 100000, or leave it empty.'); } $max = (int) $mv; }
-    $style = in_array($in['style'] ?? 'tube', ['tube', 'dots', 'square'], true) ? (string) ($in['style'] ?? 'tube') : 'tube'; $color = qr_color((string) ($in['color'] ?? ''), '#0b3d2e');
+    $style = in_array($in['style'] ?? 'tube', ['tube', 'dots', 'square'], true) ? (string) ($in['style'] ?? 'tube') : 'tube'; $color = qr_color((string) ($in['color'] ?? ''), '#0b3d2e'); if (qr_contrast_white($color) < 3.0) { throw new UserError('That QR colour is too light to scan. Pick a darker colour.'); }
     return ['title' => $title, 'message' => $msg, 'widgets' => implode(',', $widgets), 'mask' => !empty($in['mask']) ? 1 : 0, 'expires_at' => $exp, 'max_views' => $max, 'style' => $style, 'color' => $color];
 }
 /** Creates a link. Returns ['id' => int, 'token' => string, 'url' => string]. */

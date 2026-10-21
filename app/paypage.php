@@ -38,7 +38,7 @@ function paypage_default(): string {
 }
 function paypage_safe_url(string $v, bool $img = false): ?string {
     $v = trim(preg_replace('/[\x00-\x20\x7f]+/', '', $v) ?? ''); if ($v === '') { return null; }
-    if (preg_match('/^\{(' . implode('|', array_keys(PAYPAGE_PARAMS)) . ')\}$/', $v)) { return $v; }
+    $ph = str_ireplace(['%7B', '%7D'], ['{', '}'], $v); if (preg_match('/^\{(' . implode('|', array_diff(array_keys(PAYPAGE_PARAMS), ['pay_button'])) . ')\}$/', $ph)) { return $ph; } // {pay_button} is markup: never allowed inside an attribute
     if (preg_match('~^https?://[^\s"<>\\\\]+$~i', $v)) { return $v; } if (!$img && preg_match('~^(mailto:|tel:)[^\s"<>\\\\]+$~i', $v)) { return $v; }
     if (!$img && preg_match('~^mailto:\{support_email\}$~i', $v)) { return $v; }
     if ($img && strlen($v) < 200000 && preg_match('~^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$~i', $v)) { return $v; }
@@ -64,7 +64,7 @@ function paypage_sanitize(string $html): string {
             if (in_array($tag, PAYPAGE_DROP, true)) { $n->removeChild($c); continue; }
             if (!isset(PAYPAGE_TAGS[$tag])) { $walk($c); while ($c->firstChild) { $n->insertBefore($c->firstChild, $c); } $n->removeChild($c); continue; } // unknown tag: keep its text, lose the tag
             foreach (iterator_to_array($c->attributes) as $a) {
-                $name = strtolower($a->name); $val = $a->value; $c->removeAttributeNode($a); if (str_starts_with($name, 'on')) { continue; }
+                $name = strtolower($a->name); $val = $a->value; $c->removeAttributeNode($a); if (str_starts_with($name, 'on')) { continue; } if (preg_match('/(?:\{|%7B)\s*pay_button\s*(?:\}|%7D)/i', $val)) { continue; }
                 if ($name === 'style') { $s = paypage_safe_css($val); if ($s !== '') { $c->setAttribute('style', $s); } }
                 elseif ($name === 'class') { $k = trim(preg_replace('/[^A-Za-z0-9 _-]/', '', $val) ?? ''); if ($k !== '') { $c->setAttribute('class', $k); } }
                 elseif (in_array($name, PAYPAGE_TAGS[$tag], true)) {
@@ -75,7 +75,9 @@ function paypage_sanitize(string $html): string {
             $walk($c);
         }
     };
-    $walk($root); $o = ''; foreach ($root->childNodes as $c) { $o .= $doc->saveHTML($c); } return trim($o);
+    $walk($root); $o = ''; foreach ($root->childNodes as $c) { $o .= $doc->saveHTML($c); }
+    $o = preg_replace_callback('/%7B([a-z_]+)%7D/i', fn($m) => isset(PAYPAGE_PARAMS[strtolower($m[1])]) ? '{' . strtolower($m[1]) . '}' : $m[0], $o) ?? $o; // the DOM URL-encodes braces in href/src; keep the readable form in the editor
+    return trim($o);
 }
 function paypage_unknown_params(string $tpl): array { preg_match_all('/\{([a-zA-Z_]+)\}/', $tpl, $m); return array_values(array_unique(array_diff($m[1], array_keys(PAYPAGE_PARAMS)))); }
 /** Substitutes escaped values into safe HTML in a single pass. Unknown {names} are left as they are. */

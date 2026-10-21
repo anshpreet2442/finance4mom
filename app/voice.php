@@ -38,11 +38,11 @@ function voice_status(?array $u): array { $t = voice_decide($u, 'tts'); $s = voi
 // ============================ text + cache ============================
 /** Plain speakable text: markdown, links and symbols removed, whitespace tidied, length capped at a sentence. */
 function voice_clean_text(string $t, int $max = VOICE_MAX_TTS_CHARS): string {
-    $t = preg_replace('/```.*?```/s', ' ', $t) ?? $t; $t = preg_replace('/!?\[([^\]]*)\]\([^)]*\)/', '$1', $t) ?? $t; $t = preg_replace('~https?://\S+~', ' link ', $t) ?? $t; $t = preg_replace('/(\*+|_{2,}|`+)/', '', $t) ?? $t; $t = preg_replace('/[#>|]+/', ' ', $t) ?? $t;
+    $t = preg_replace('/[\x00-\x08\x0B-\x1F\x7F]+/', ' ', $t) ?? $t; $t = preg_replace('/```.*?```/s', ' ', $t) ?? $t; $t = preg_replace('/!?\[([^\]]*)\]\([^)]*\)/', '$1', $t) ?? $t; $t = preg_replace('~https?://\S+~', ' link ', $t) ?? $t; $t = preg_replace('/(\*+|_{2,}|`+)/', '', $t) ?? $t; $t = preg_replace('/[#>|]+/', ' ', $t) ?? $t;
     $t = trim(preg_replace('/\s+/u', ' ', $t) ?? ''); if (mb_strlen($t) > $max) { $cut = mb_substr($t, 0, $max); $p = max((int) mb_strrpos($cut, '. '), (int) mb_strrpos($cut, '? '), (int) mb_strrpos($cut, '! ')); $t = $p > $max * 0.5 ? mb_substr($cut, 0, $p + 1) : $cut; } return $t;
 }
 function voice_cache_dir(): string { $d = rtrim((string) (getenv('MFNC_VOICE_CACHE') ?: sys_get_temp_dir()), '/') . '/mfnc-voice'; if (!is_dir($d)) { @mkdir($d, 0700, true); } return $d; }
-function voice_hash(string $text, string $format = 'mp3'): string { $c = voice_cfg(); return hash('sha256', implode('|', [$c['voice_id'], $c['model'], $format, voice_mock() ? 'mock' : 'live', $text])); }
+function voice_hash(string $text, string $format = 'mp3'): string { $c = voice_cfg(); return c_hmac(implode('|', [$c['voice_id'], $c['model'], $format, voice_mock() ? 'mock' : 'live', $text])); /* keyed: another signed-in person cannot probe the cache for a known sentence */ }
 function voice_cache_path(string $h, string $format = 'mp3'): string { return voice_cache_dir() . '/' . $h . '.' . ($format === 'opus' ? 'opus' : 'mp3'); }
 function voice_cache_put(string $h, string $bytes, string $format = 'mp3'): void { @file_put_contents(voice_cache_path($h, $format), $bytes, LOCK_EX); voice_cache_trim(); }
 /** Keeps the cache under its size cap by deleting the least recently used files first (down to 80% of the cap). */

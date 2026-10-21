@@ -222,3 +222,20 @@ $png = lw_wire_png($dd, 'desktop'); check('wireframe PNG renders', str_starts_wi
 set_setting('feat_ai_layout_mode', 'paid'); $ev = []; lw_ai_turn($other ? one('SELECT * FROM {users} WHERE id=?', [$other]) : $ulo, (int) $row['id'], 'x', $emit); check('AI turn is refused without the plugin (server side)', end($ev)['type'] === 'error' || $ev[0]['type'] === 'error'); set_setting('feat_ai_layout_mode', 'free');
 $ev = []; set_setting('ai_enabled', '0'); lw_ai_turn($ulo, (int) $row['id'], 'put my bills first', $emit); eq($ev[0]['type'], 'error', 'AI switched off: honest error, no changes'); set_setting('ai_enabled', '1'); putenv('MFNC_AI_MOCK');
 $ptmp = null; $GLOBALS['__user'] = $ulo; $_GET = ['draft' => (string) $row['id']]; ob_start(); page_layout_preview(); $ph = (string) ob_get_clean(); check('preview page renders the draft with the real widgets and no scripts', str_contains($ph, 'data-preview="1"') && str_contains($ph, 'data-lw="balance"') && !str_contains($ph, '<script')); unset($GLOBALS['__user']); $_GET = [];
+
+// ---- round 3 tester regressions ----
+section('Tester round 3');
+check('QR contrast helper: white fails, the default green passes', qr_contrast_white('#ffffff') < 3 && qr_contrast_white('#0b3d2e') > 7 && qr_contrast_white('#aaaaaa') < 3);
+throws(fn() => share_validate(['title' => 'T', 'widgets' => ['summary'], 'color' => '#eeeeee']), 'too light', 'a pale QR colour that cannot be scanned is refused');
+check('a dark QR colour is accepted', share_validate(['title' => 'T', 'widgets' => ['summary'], 'color' => '#1a237e'])['color'] === '#1a237e');
+$pbtn = '<a class="pay" href="https://pay.example/1" style="x">PAY</a>';
+foreach (['<img src="https://a.b/x.png" alt="{pay_button}<b>">', '<a href="{pay_button}">x</a>', '<img src="{pay_button}">', '<a href="https://ok.example/{pay_button}">x</a>', '<img alt="%7Bpay_button%7D">'] as $badTpl) {
+    check('{pay_button} never lands inside an attribute: ' . substr($badTpl, 0, 40), !str_contains(paypage_fill(paypage_sanitize($badTpl), ['amount' => '1'], $pbtn), 'class="pay"'));
+}
+check('{pay_button} still works as text', str_contains(paypage_fill(paypage_sanitize('<div>{pay_button}</div>'), [], $pbtn), 'class="pay"'));
+$once = paypage_sanitize('<img src="{logo_url}" alt="x"><a href="{return_link}">b</a>'); $twice = paypage_sanitize($once);
+check('placeholders in src/href survive a second sanitise (saved templates are re-sanitised on every render)', $once === $twice && str_contains($twice, 'src="{logo_url}"') && str_contains($twice, 'href="{return_link}"'), $twice);
+check('and the filled page gets the real URLs', str_contains(paypage_fill($twice, ['logo_url' => 'https://a.b/l.png', 'return_link' => 'https://a.b/r'], ''), 'src="https://a.b/l.png"'));
+check('voice cache hash is keyed (not a plain sha256 of the text)', voice_hash('Hello') !== hash('sha256', implode('|', [voice_cfg()['voice_id'], voice_cfg()['model'], 'mp3', voice_mock() ? 'mock' : 'live', 'Hello'])) && strlen(voice_hash('Hello')) === 64);
+check('voice text loses control characters', !preg_match('/[\x00-\x08]/', voice_clean_text("a\x00b\x01 c")));
+$pp = new MfPdf(); $pp->AddPage(); $pp->f('', 9); $pp->SetXY(14, 20); $pp->Cell(30, 6, $pp->t(str_repeat('W', 80)), 0, 0); check('PDF cells never run past their width (truncated with ...)', $pp->GetX() - 14 <= 30.01 && str_starts_with($pp->Output('S'), '%PDF'));

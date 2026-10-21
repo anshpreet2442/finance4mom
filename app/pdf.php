@@ -109,6 +109,15 @@ class MfPdf extends FPDF {
         if (!$this->uni) { $s = str_replace('₹', 'Rs.', $s); return (string) @iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $s); }
         return implode("\x80", array_map(fn($p) => (string) @iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $p), explode('₹', $s)));
     }
+    /** Every cell shrinks its text (down to 70%) and then ends with "..." instead of running into the next cell or off the page. */
+    function Cell($w, $h = 0, $txt = '', $border = 0, $ln = 0, $align = '', $fill = false, $link = ''): void {
+        $txt = (string) $txt; $avail = ((float) $w > 0 ? (float) $w : $this->w - $this->rMargin - $this->x) - 2 * $this->cMargin; $orig = $this->FontSizePt; $size = $orig;
+        if ($txt !== '' && $this->GetStringWidth($txt) > $avail) {
+            while ($size > $orig * 0.7 && $this->GetStringWidth($txt) > $avail) { $size -= 0.5; $this->SetFontSize($size); }
+            if ($this->GetStringWidth($txt) > $avail) { while ($txt !== '' && $this->GetStringWidth($txt . '...') > $avail) { $txt = substr($txt, 0, -1); } $txt .= '...'; }
+        }
+        parent::Cell($w, $h, $txt, $border, $ln, $align, $fill, $link); if ($size !== $orig) { $this->SetFontSize($orig); }
+    }
     function f(string $style = '', float $size = 10): void { $this->SetFont($this->uni ? 'dejavu' : 'Helvetica', $style === 'B' ? 'B' : '', $size); }
     function rgb(array $c): array { return $c; }
     function Header(): void {

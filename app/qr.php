@@ -109,6 +109,11 @@ function qr_version_of(array $m): int { return (count($m) - 17) / 4; }
 
 // ============================ rendering ============================
 function qr_color(string $c, string $default): string { return preg_match('/^#[0-9a-fA-F]{6}$/', $c) ? strtolower($c) : $default; }
+/** WCAG contrast ratio of a #rrggbb colour against white (a QR code needs a clearly darker foreground). */
+function qr_contrast_white(string $hex): float {
+    $l = 0.0; foreach ([1, 3, 5] as $k => $o) { $c = hexdec(substr($hex, $o, 2)) / 255; $c = $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4; $l += [0.2126, 0.7152, 0.0722][$k] * $c; }
+    return 1.05 / ($l + 0.05);
+}
 function qr_in_finder(int $x, int $y, int $n): bool { return ($x < 7 && $y < 7) || ($x >= $n - 7 && $y < 7) || ($x < 7 && $y >= $n - 7); }
 /** Which modules draw: finders are drawn as rounded shapes, so they are skipped in the generic pass. */
 function qr_opts(array $o): array {
