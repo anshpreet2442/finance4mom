@@ -33,7 +33,7 @@ body[data-presence="busy"] .am-dot { background: #ef4444; }
 .am--hero .am-id { flex: none; }
 .am--side { display: block; }
 .am--side .am__trigger { width: 100%; }
-@media (max-width: 767.98px) {
+@media (max-width: 1199.98px) {   /* below a wide desktop the top bar is crowded (search, theme, bell, add): the profile chip shrinks to the avatar */
   .am--bar .am-txt, .am--bar .am__chev { display: none; }
   .am--bar .am__trigger { width: 48px; padding: 7px; justify-content: center; }
   .am--bar .am-id { flex: none; }
