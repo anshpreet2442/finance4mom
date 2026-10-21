@@ -245,3 +245,7 @@ svg .bar:hover { filter: brightness(1.06); }
 main header.justify-between { flex-wrap: wrap; }
 main header.justify-between > .shrink-0 { flex-wrap: wrap; }
 main header.justify-between > .min-w-0 { flex: 1 1 14rem; }
+
+/* overview trio: amounts scale to their tile (container units) so long values like ₹46,294.70 never touch the edge */
+.stat-trio > div{min-width:0;container-type:inline-size;padding:1rem 1.125rem}
+.stat-trio .num{font-size:clamp(1rem,12cqi,1.5rem);line-height:1.15;overflow-wrap:anywhere}
