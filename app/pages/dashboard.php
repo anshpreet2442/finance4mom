@@ -39,10 +39,10 @@ function page_dashboard(): void {
     </section>
 
     <!-- At a glance -->
-    <section class="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="At a glance">
-      <?= stat_card('Upcoming bills (30 days)', e(fmt($d['upcoming_total'])), $d['upcoming_count'] . ' bill' . ($d['upcoming_count'] === 1 ? '' : 's') . ' due', $d['upcoming_total'] ? 'warn' : '', '/bills') ?>
+    <section class="stat-grid" aria-label="At a glance">
+      <?= stat_card('Upcoming bills', e(fmt($d['upcoming_total'])), $d['upcoming_count'] . ' bill' . ($d['upcoming_count'] === 1 ? '' : 's') . ' due in the next 30 days', $d['upcoming_total'] ? 'warn' : '', '/bills') ?>
       <?= stat_card('Outstanding payments', e(fmt($d['outstanding'])), $d['overdue_count'] ? $d['overdue_count'] . ' overdue' : 'Nothing overdue', $d['outstanding'] ? 'neg' : '', '/bills') ?>
-      <?= stat_card('Total savings', e(fmt($d['total_saved'])), 'Across ' . count($d['goals']) . ' goal' . (count($d['goals']) === 1 ? '' : 's') . ' · ' . e(fmt($d['reserved'])) . ' reserved overall', 'pos', '/goals') ?>
+      <?= stat_card('Total savings', e(fmt($d['total_saved'])), 'Across ' . count($d['goals']) . ' goal' . (count($d['goals']) === 1 ? '' : 's') . "\n" . e(fmt($d['reserved'])) . ' reserved overall', 'pos', '/goals') ?>
       <?= stat_card('Income expected', e(fmt($sum['income_expected'])), 'Not yet received', $sum['income_expected'] ? 'warn' : '', '/income') ?>
     </section>
 

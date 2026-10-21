@@ -39,9 +39,11 @@ function card_flush_open(string $title = '', string $sub = '', string $actions =
     echo '<div class="pt-3">';
 }
 function stat_card(string $label, string $value, string $sub = '', string $tone = '', string $href = ''): string {
+    // one tile = label / value / divider / one muted line per "\n" in $sub; nothing runs into the edges
     $t = ['pos' => 'text-lime-dk', 'neg' => 'text-neg', 'warn' => 'text-orange-dk'][$tone] ?? 'text-ink';
-    $inner = '<div class="text-sm text-mute">' . e($label) . '</div><div class="num mt-1 text-2xl font-semibold tracking-tight ' . $t . '" data-count>' . $value . '</div>' . ($sub !== '' ? '<div class="mt-1 text-xs text-mute">' . $sub . '</div>' : '');
-    return $href !== '' ? '<a href="' . e(url($href)) . '" class="card block p-5 transition hover:shadow-md">' . $inner . '</a>' : '<div class="card p-5">' . $inner . '</div>';
+    $lines = $sub === '' ? '' : '<ul class="stat-tile__notes">' . implode('', array_map(fn($l) => '<li>' . $l . '</li>', array_filter(explode("\n", $sub), 'strlen'))) . '</ul>';
+    $inner = '<div class="stat-tile__label">' . e($label) . '</div><div class="stat-tile__value num ' . $t . '" data-count>' . $value . '</div>' . $lines;
+    return $href !== '' ? '<a href="' . e(url($href)) . '" class="card stat-tile transition hover:shadow-md">' . $inner . '</a>' : '<div class="card stat-tile">' . $inner . '</div>';
 }
 function empty_state(string $title, string $text = '', string $cta = '', string $ic = 'sparkles'): string {
     // $cta is trusted HTML, e.g. '<a class="btn btn-primary" href="...">Add bill</a>'
