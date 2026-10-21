@@ -38,7 +38,7 @@ function telegram_dashboard_prompt(array $u): string {
     } catch (Throwable $e) { log_error($e); return ''; }
 }
 function page_api_telegram(): void {
-    header('Content-Type: application/json'); header('Cache-Control: no-store'); $u = current_user();
+    if (!headers_sent()) { header('Content-Type: application/json'); header('Cache-Control: no-store'); } $u = current_user();
     if (!$u) { http_response_code(401); echo json_encode(['error' => 'sign in']); return; }
     $l = tg_link_for((int) $u['id']); echo json_encode(['linked' => (bool) $l, 'username' => $l['tg_username'] ?? null]);
 }
