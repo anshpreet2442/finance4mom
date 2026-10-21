@@ -15,3 +15,18 @@
 .voice-auto input{width:18px;height:18px;accent-color:var(--lime-dk,#0b6b4d)}
 .voice-hint{opacity:.8}
 [data-voice-read].is-on{border-color:currentColor}
+/* AI layout: the dashboard grid */
+.lw-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:1.25rem}
+.lw-i{grid-column:span 12;min-width:0}
+.lw-i>.card,.lw-i>section{height:100%}
+@media (min-width:768px){.lw-third,.lw-quarter{grid-column:span 6}.lw-third.lw-md-full{grid-column:span 12}}
+@media (min-width:1024px){.lw-half{grid-column:span 6}.lw-quarter{grid-column:span 3}.lw-two_thirds{grid-column:span 8}}
+@media (min-width:1536px){.lw-third,.lw-third.lw-md-full{grid-column:span 4}}
+.lw-stack>*+*{margin-top:1.25rem}
+.lw-compact .card.p-6,.lw-compact .card .p-6,.lw-compact section.p-6{padding:1rem}
+.lw-compact header.px-6{padding-inline:1rem;padding-top:.75rem}
+.lw-compact .lw-grid,.lw-compact .lw-side{gap:.75rem}.lw-compact .lw-side>*+*,.lw-compact .lw-stack>*+*{margin-top:.75rem}
+.lw-hc{--mute:#1c2622}.dark .lw-hc,:root.dark .lw-hc{--mute:#e9efeb}
+.lw-hc .card,.lw-hc .stat-tile{border:2px solid currentColor}
+.lw-big .btn,.lw-big .quick,.lw-big a.btn{min-height:52px;font-size:1.05rem}.lw-big .quick{width:64px;height:64px}
+.lw-big .stat-tile__value{font-size:1.9rem}

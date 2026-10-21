@@ -168,7 +168,7 @@ function share_public(string $token, string $sub = ''): void {
             share_page_shell($r['title'], '<div class="card" style="margin-top:10vh"><h1>' . e($r['title']) . '</h1><p class="sub">This view is protected. Enter the password you were given.</p><form class="pw" method="post" action="' . e(url('/s/' . $token)) . '"><input type="hidden" name="t" value="' . e($_SESSION['share_csrf']) . '"><label for="pw" class="mute">Password</label><input id="pw" type="password" name="password" autocomplete="off" required autofocus>'
                 . ($err ? '<p class="err" role="alert">' . e($err) . '</p>' : '') . '<button type="submit">Open</button></form></div>', $og, $err ? 401 : 200); return; }
     }
-    if (method() === 'POST') { redirect(url('/s/' . $token)); } // password accepted: reload as GET
+    if (method() === 'POST') { c_status(303); c_hdr('Location: ' . url('/s/' . $token)); if (PHP_SAPI !== 'cli') { exit; } return; } // password accepted: reload as GET
     // count the view (the same visitor session counts once per 10 minutes) and respect the limit atomically
     $seen = (int) ($_SESSION['share_seen_' . $r['id']] ?? 0); $count = $seen < time() - 600;
     if ($count) { if (run('UPDATE {c_share_links} SET views=views+1, last_viewed_at=UTC_TIMESTAMP() WHERE id=? AND status=\'active\' AND (max_views IS NULL OR views < max_views) AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())', [$r['id']]) === 0) { c_session_close(); share_notice('This link is no longer available', 'It has expired or reached its view limit.', 410); return; } $_SESSION['share_seen_' . $r['id']] = time(); }
