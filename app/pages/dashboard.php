@@ -26,18 +26,16 @@ function page_dashboard(): void {
   <div class="min-w-0 space-y-5">
 
     <!-- Balance overview -->
-    <section class="card grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_230px]" aria-label="Balance overview">
-      <div class="min-w-0">
-        <p class="num text-4xl font-semibold tracking-tight"><?= e(fmt($d['cash'])) ?></p>
-        <p class="text-sm text-mute">Balance overview · spendable <?= e(fmt($d['spendable'])) ?> · reserved <?= e(fmt($d['reserved'])) ?></p>
-        <div class="mt-4"><?= chart_bars(array_map(fn($m) => ['label' => substr($m['label'], 0, 3), 'values' => [max($m['net'], 0), $m['income'], $m['expenses']]], $series),
-            [['name' => 'Savings', 'color' => 'yellow'], ['name' => 'Income', 'color' => 'lime'], ['name' => 'Expenses', 'color' => 'orange']], 250) ?></div>
+    <section class="card p-6" aria-label="Balance overview">
+      <p class="num text-4xl font-semibold tracking-tight"><?= e(fmt($d['cash'])) ?></p>
+      <p class="text-sm text-mute">Balance overview · spendable <?= e(fmt($d['spendable'])) ?> · reserved <?= e(fmt($d['reserved'])) ?></p>
+      <div class="stat-trio mt-5">
+        <div class="rounded-2xl bg-soft p-4"><p class="text-sm text-mute">Income received</p><p class="num text-2xl font-semibold"><?= e(fmt($sum['income'])) ?></p><?= change_chip(pct_change($sum['income'], $prev['income'] ?? 0)) ?></div>
+        <div class="rounded-2xl bg-soft p-4"><p class="text-sm text-mute">Total expenses</p><p class="num text-2xl font-semibold"><?= e(fmt($sum['expenses'])) ?></p><?= change_chip(pct_change($sum['expenses'], $prev['expenses'] ?? 0), false) ?></div>
+        <div class="rounded-2xl bg-soft p-4"><p class="text-sm text-mute">Saved this month</p><p class="num text-2xl font-semibold <?= $sum['net'] < 0 ? 'text-neg' : '' ?>"><?= e(fmt($sum['net'])) ?></p><?= change_chip(isset($prev) && $prev['net'] > 0 ? pct_change($sum['net'], $prev['net']) : null) ?></div>
       </div>
-      <div class="flex flex-col justify-between gap-5 border-t border-line pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-        <div><p class="text-sm text-mute">Income received</p><p class="num text-3xl font-semibold"><?= e(fmt($sum['income'])) ?></p><?= change_chip(pct_change($sum['income'], $prev['income'] ?? 0)) ?></div>
-        <div><p class="text-sm text-mute">Total expenses</p><p class="num text-3xl font-semibold"><?= e(fmt($sum['expenses'])) ?></p><?= change_chip(pct_change($sum['expenses'], $prev['expenses'] ?? 0), false) ?></div>
-        <div><p class="text-sm text-mute">Saved this month</p><p class="num text-3xl font-semibold <?= $sum['net'] < 0 ? 'text-neg' : '' ?>"><?= e(fmt($sum['net'])) ?></p><?= change_chip(isset($prev) && $prev['net'] > 0 ? pct_change($sum['net'], $prev['net']) : null) ?></div>
-      </div>
+      <div class="mt-5"><?= chart_bars(array_map(fn($m) => ['label' => substr($m['label'], 0, 3), 'values' => [max($m['net'], 0), $m['income'], $m['expenses']]], $series),
+          [['name' => 'Savings', 'color' => 'yellow'], ['name' => 'Income', 'color' => 'lime'], ['name' => 'Expenses', 'color' => 'orange']], 250) ?></div>
     </section>
 
     <!-- At a glance -->

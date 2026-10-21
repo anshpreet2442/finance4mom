@@ -18,7 +18,7 @@ function page_sw(): void {
 }
 function page_offline(): void {
     header('Cache-Control: no-cache'); ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Offline · <?= e(APP_NAME) ?></title><meta name="theme-color" content="#d23d09">
-<script>try{if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script><link rel="stylesheet" href="<?= e(asset('app.css')) ?>"></head>
+<script>try{if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script><link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>"></head>
 <body class="bg-page text-ink"><main class="m-hero grid min-h-dvh place-items-center rounded-none px-6 text-center"><div class="max-w-sm">
 <span class="mx-auto grid size-24 place-items-center rounded-full m-glass"><?= icon('cloud-off', 'size-11') ?></span><h1 class="mt-6 text-3xl font-semibold tracking-tight">You are offline</h1>
 <p class="mt-3 text-white/85">This page was not saved on your phone yet. Pages you have opened before still work, and anything you add offline will sync by itself when you reconnect.</p>

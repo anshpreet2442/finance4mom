@@ -7,7 +7,7 @@ const BUILD = '__BUILD__';
 const BASE = '__BASE__';
 const SHELL = 'mfnc-shell-' + BUILD;
 const PAGES = 'mfnc-pages-' + BUILD;
-const PRECACHE = ['/assets/app.css', '/assets/app.js', '/assets/pwa.js', '/assets/sync.js', '/assets/spa.js', '/assets/jelly.js', '/assets/slosh.js', '/assets/passkey.js', '/assets/icons/icon-192.png', '/assets/icons/icon-512.png', '/offline', '/manifest.webmanifest'].map(function (p) { return BASE + p; });
+const PRECACHE = ['/assets/app.css', '/assets/polish.css', '/assets/app.js', '/assets/pwa.js', '/assets/sync.js', '/assets/spa.js', '/assets/jelly.js', '/assets/slosh.js', '/assets/passkey.js', '/assets/icons/icon-192.png', '/assets/icons/icon-512.png', '/offline', '/manifest.webmanifest'].map(function (p) { return BASE + p; });
 const NEVER = /^\/(do|sync|api|webhooks|login|register|admin|dues\/return|sw\.js)(\/|$)/;
 importScripts(BASE + '/assets/sync.js');
 

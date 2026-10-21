@@ -5,7 +5,7 @@ function auth_shell(string $title, string $heading, string $sub, string $form, s
     $nonce = '';
     ?><!doctype html><html lang="en" data-theme="system"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?= e($title) ?> · <?= e(APP_NAME) ?></title>
 <script>try{if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"></head>
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>"></head>
 <body class="bg-page text-ink antialiased" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>"><main class="grid min-h-dvh place-items-center px-4 py-10"><div class="w-full max-w-md">
 <div class="mb-6 flex items-center justify-center gap-2.5 text-2xl font-bold tracking-tight"><span class="grid size-10 place-items-center rounded-2xl bg-lime text-ink"><?= icon('trending-up', 'size-6') ?></span><?= e(APP_NAME) ?></div>
 <div class="card p-7 sm:p-8"><h1 class="text-2xl font-semibold tracking-tight"><?= e($heading) ?></h1><p class="mb-6 mt-1 text-sm text-mute"><?= e($sub) ?></p>

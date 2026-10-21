@@ -43,8 +43,9 @@ function stat_card(string $label, string $value, string $sub = '', string $tone 
     $inner = '<div class="text-sm text-mute">' . e($label) . '</div><div class="num mt-1 text-2xl font-semibold tracking-tight ' . $t . '" data-count>' . $value . '</div>' . ($sub !== '' ? '<div class="mt-1 text-xs text-mute">' . $sub . '</div>' : '');
     return $href !== '' ? '<a href="' . e(url($href)) . '" class="card block p-5 transition hover:shadow-md">' . $inner . '</a>' : '<div class="card p-5">' . $inner . '</div>';
 }
-function empty_state(string $title, string $text = ''): string {
-    return '<div class="rounded-3xl border border-dashed border-line px-6 py-10 text-center"><p class="font-medium">' . e($title) . '</p>' . ($text ? '<p class="mx-auto mt-1 max-w-md text-sm text-mute">' . $text . '</p>' : '') . '</div>';
+function empty_state(string $title, string $text = '', string $cta = '', string $ic = 'sparkles'): string {
+    // $cta is trusted HTML, e.g. '<a class="btn btn-primary" href="...">Add bill</a>'
+    return '<div class="empty"><span class="empty-ic">' . icon($ic, 'size-6') . '</span><p class="font-semibold">' . e($title) . '</p>' . ($text ? '<p class="max-w-md text-sm text-mute">' . $text . '</p>' : '') . $cta . '</div>';
 }
 function page_header(string $title, string $sub = '', string $actions = ''): void {
     echo '<div class="mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">' . e($title) . '</h1>' . ($sub ? '<p class="mt-1 text-sm text-mute">' . e($sub) . '</p>' : '') . '</div>' . ($actions ? '<div class="flex flex-wrap items-center gap-2">' . $actions . '</div>' : '') . '</div>';
@@ -252,7 +253,7 @@ function layout_start(string $title, string $active, ?array $s = null, array $op
 <link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>"><link rel="icon" type="image/png" href="<?= e(asset('icons/favicon-64.png')) ?>"><link rel="apple-touch-icon" href="<?= e(asset('icons/apple-touch-icon.png')) ?>">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <script>try{var d=document.documentElement;d.classList.add('js');var t=localStorage.getItem('mfnc-theme')||d.dataset.theme;if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');var p=localStorage.getItem('mfnc-palette');if(p)d.setAttribute('data-palette',p);<?php if ($s): ?>if(!sessionStorage.getItem('mfnc-seen')||sessionStorage.getItem('mfnc-reload'))d.classList.add('has-splash');<?php endif; ?>}catch(e){}</script>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>"><link rel="stylesheet" href="<?= e(asset('polish.css')) ?>">
 </head>
 <body class="bg-page text-ink antialiased" data-base="<?= e(base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>" data-user="<?= (int) $u['id'] ?>" data-locale="<?= e(prefs()['locale']) ?>" data-symbol="<?= e(currency_symbol()) ?>" data-passkeys="<?= (int) val('SELECT COUNT(*) FROM {passkeys} WHERE user_id=?', [$u['id']]) ?>">
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-card">Skip to content</a>
@@ -352,7 +353,7 @@ function render_error(int $code, string $title, string $msg): void {
     http_response_code($code);
     $u = current_user();
     if ($u && $code !== 500) { layout_start($title, '', null); echo '<div class="mx-auto max-w-lg py-16 text-center"><p class="text-6xl font-bold text-lime-dk">' . $code . '</p><h1 class="mt-3 text-2xl font-semibold">' . e($title) . '</h1><p class="mt-2 text-mute">' . e($msg) . '</p><a class="btn btn-primary mt-6" href="' . e(url('/')) . '">Back to dashboard</a></div>'; layout_end(); return; }
-    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . e($title) . '</title><link rel="stylesheet" href="' . e(asset('app.css')) . '"><body class="bg-page text-ink"><div class="mx-auto max-w-lg px-6 py-24 text-center"><p class="text-6xl font-bold text-lime-dk">' . $code . '</p><h1 class="mt-3 text-2xl font-semibold">' . e($title) . '</h1><p class="mt-2 text-mute">' . e($msg) . '</p><a class="btn btn-primary mt-6" href="' . e(url('/')) . '">Go home</a></div></body>';
+    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . e($title) . '</title><link rel="stylesheet" href="' . e(asset('app.css')) . '"><link rel="stylesheet" href="' . e(asset('polish.css')) . '"><body class="bg-page text-ink"><div class="mx-auto max-w-lg px-6 py-24 text-center"><p class="text-6xl font-bold text-lime-dk">' . $code . '</p><h1 class="mt-3 text-2xl font-semibold">' . e($title) . '</h1><p class="mt-2 text-mute">' . e($msg) . '</p><a class="btn btn-primary mt-6" href="' . e(url('/')) . '">Go home</a></div></body>';
 }
 
 // ============================ shared list pieces ============================
